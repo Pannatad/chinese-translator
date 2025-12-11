@@ -67,12 +67,13 @@ export class WordHighlighter {
         const html = `
             <div class="word-highlight-container click-mode">
                 <div class="highlight-section">
-                    <h4>中文 (Chinese)</h4>
+                    <h4>中文 (Chinese) <span class="hint-text">(tap word for examples)</span></h4>
                     <div class="word-row chinese-row">
                         ${this.wordPairs.map((pair, index) => `
                             <span class="word-chip chinese-chip" data-index="${index}">
                                 <span class="word-text">${pair.chinese}</span>
                                 <span class="word-pinyin">${pair.pinyin}</span>
+                                <button class="example-btn" data-index="${index}" title="Generate example sentences">📝</button>
                             </span>
                         `).join('')}
                     </div>
@@ -85,6 +86,12 @@ export class WordHighlighter {
                                 ${pair.translation}
                             </span>
                         `).join('')}
+                    </div>
+                </div>
+                <div id="exampleSentencePopover" class="example-popover" style="display: none;">
+                    <div class="example-popover-content">
+                        <button class="example-popover-close">×</button>
+                        <div id="exampleSentenceContent"></div>
                     </div>
                 </div>
             </div>
@@ -161,6 +168,74 @@ export class WordHighlighter {
                 }
             });
         });
+
+        // Handle example button clicks
+        const exampleBtns = container.querySelectorAll('.example-btn');
+        exampleBtns.forEach(btn => {
+            btn.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+            });
+            btn.addEventListener('pointerup', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (e.isPrimary) {
+                    const index = parseInt(btn.dataset.index);
+                    const pair = this.wordPairs[index];
+                    if (pair && this.onGenerateExample) {
+                        this.onGenerateExample(pair.chinese, pair.pinyin);
+                    }
+                }
+            });
+        });
+
+        // Handle popover close button
+        const closeBtn = container.querySelector('.example-popover-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('pointerup', (e) => {
+                e.stopPropagation();
+                this.hideExamplePopover();
+            });
+        }
+    }
+
+    /**
+     * Set callback for generating example sentences
+     */
+    setExampleCallback(callback) {
+        this.onGenerateExample = callback;
+    }
+
+    /**
+     * Show example sentences in popover
+     */
+    showExamplePopover(sentences, word) {
+        const popover = document.getElementById('exampleSentencePopover');
+        const content = document.getElementById('exampleSentenceContent');
+
+        if (!popover || !content) return;
+
+        const html = `
+            <h4>📝 Examples for: ${word}</h4>
+            ${sentences.map(s => `
+                <div class="example-sentence">
+                    <div class="example-chinese">${s.chinese}</div>
+                    <div class="example-pinyin">${s.pinyin}</div>
+                    <div class="example-translation">${s.translation}</div>
+                </div>
+            `).join('')}
+        `;
+
+        content.innerHTML = html;
+        popover.style.display = 'block';
+    }
+
+    /**
+     * Hide example popover
+     */
+    hideExamplePopover() {
+        const popover = document.getElementById('exampleSentencePopover');
+        if (popover) popover.style.display = 'none';
     }
 
     /**

@@ -40,6 +40,15 @@
                     <button id="authBtn" class="auth-btn">
                         <span id="authBtnText">Login</span>
                     </button>
+                    <!-- History Button (shown when logged in) -->
+                    <button id="historyBtn" class="icon-btn" aria-label="History" style="display: none;"
+                        title="Translation History">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </button>
                     <button id="settingsBtn" class="icon-btn" aria-label="Settings">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2">
@@ -53,14 +62,53 @@
             </div>
         </header>
 
-        <!-- Upload Area (shown when no PDF loaded) -->
+        <!-- Upload Area (shown when no PDF/image loaded) -->
         <div id="uploadArea" class="upload-area">
             <div class="upload-content">
                 <div class="upload-icon">📄</div>
-                <h2>Upload PDF Document</h2>
-                <p>Drop your PDF file here or click to browse</p>
-                <input type="file" id="pdfInput" accept=".pdf" hidden>
-                <button id="uploadBtn" class="primary-btn">Choose PDF File</button>
+                <h2>Translate Chinese Text</h2>
+                <p>Choose a PDF, take a photo, or upload an image</p>
+
+                <div class="upload-buttons">
+                    <input type="file" id="pdfInput" accept=".pdf" hidden>
+                    <input type="file" id="imageInput" accept="image/*" hidden>
+                    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+
+                    <button id="uploadBtn" class="primary-btn">📄 Choose PDF</button>
+                    <button id="uploadImageBtn" class="primary-btn image-btn">🖼️ Upload Image</button>
+                    <button id="cameraBtn" class="primary-btn camera-btn">📷 Take Photo</button>
+                    <button id="liveCameraBtn" class="primary-btn live-btn">🔴 Live Translate</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Camera Viewer (Real-time translation) -->
+        <div id="liveCameraArea" class="live-camera-area" style="display: none;">
+            <div class="live-camera-header">
+                <h3>🔴 Live Translation</h3>
+                <div class="live-controls">
+                    <button id="liveTranslateBtn" class="control-btn" title="Translate Now">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                    <button id="closeLiveBtn" class="control-btn" title="Close">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="live-camera-container">
+                <video id="liveVideo" autoplay playsinline muted></video>
+                <canvas id="liveCanvas" style="display: none;"></canvas>
+                <canvas id="liveOverlay" class="live-overlay"></canvas>
+            </div>
+            <div class="live-hint">
+                <span>📌 Point at Chinese text • Translations update every 3 seconds</span>
             </div>
         </div>
 
@@ -105,6 +153,14 @@
                     </button>
                 </div>
 
+                <div class="control-group">
+                    <button id="liveTranslateModeBtn" class="control-btn live-mode-btn"
+                        aria-label="Toggle Live Translation" title="Auto-translate selection">
+                        <span class="live-dot">●</span>
+                        <span>Live</span>
+                    </button>
+                </div>
+
                 <button id="newPdfBtn" class="control-btn" aria-label="Upload new PDF">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -139,6 +195,49 @@
             </div>
         </div>
 
+        <!-- Image Viewer Area (for camera/uploaded images) -->
+        <div id="imageViewerArea" class="pdf-viewer-area" style="display: none;">
+            <!-- Image Controls -->
+            <div class="pdf-controls">
+                <div class="control-group">
+                    <span class="page-info">📷 Image Mode</span>
+                </div>
+
+                <button id="newImageBtn" class="control-btn" aria-label="Upload new image">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Image Container -->
+            <div id="imageContainer" class="pdf-container">
+                <img id="uploadedImage" src="" alt="Uploaded image"
+                    style="max-width: 100%; max-height: 100%; object-fit: contain;">
+
+                <!-- Selection Box for Image (reuses same structure) -->
+                <div id="imageSelectionBox" class="selection-box">
+                    <div class="selection-border"></div>
+                    <div class="resize-handle top-left"></div>
+                    <div class="resize-handle top-right"></div>
+                    <div class="resize-handle bottom-left"></div>
+                    <div class="resize-handle bottom-right"></div>
+                    <button id="imageCaptureBtn" class="capture-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Translate
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings Modal -->
         <div id="settingsModal" class="modal" style="display: none;">
             <div class="modal-content">
@@ -156,8 +255,14 @@
                     <div class="setting-group">
                         <label for="targetLanguage">Translation Language</label>
                         <select id="targetLanguage" class="select-field">
-                            <option value="english">English</option>
-                            <option value="thai">ภาษาไทย (Thai)</option>
+                            <option value="english">🇺🇸 English</option>
+                            <option value="thai">🇹🇭 ภาษาไทย (Thai)</option>
+                            <option value="japanese">🇯🇵 日本語 (Japanese)</option>
+                            <option value="korean">🇰🇷 한국어 (Korean)</option>
+                            <option value="spanish">🇪🇸 Español (Spanish)</option>
+                            <option value="french">🇫🇷 Français (French)</option>
+                            <option value="german">🇩🇪 Deutsch (German)</option>
+                            <option value="vietnamese">🇻🇳 Tiếng Việt (Vietnamese)</option>
                         </select>
                     </div>
 
@@ -314,6 +419,31 @@
                             style="color: #4caf50;">20 more credits</strong> instantly!</p>
                     <button id="guestLoginBtn" class="primary-btn"
                         style="background: linear-gradient(135deg, #4caf50, #8bc34a);">✨ Sign Up for 20 Credits</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Modal -->
+        <div id="historyModal" class="modal" style="display: none;">
+            <div class="modal-content history-modal-content">
+                <div class="modal-header">
+                    <h2>🕒 Translation History</h2>
+                    <button id="closeHistoryBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="historyList" class="history-list">
+                        <!-- History items will be populated here -->
+                    </div>
+                    <div id="historyEmpty" class="history-empty" style="display: none;">
+                        <p>📝 No translations yet</p>
+                        <p class="text-secondary">Your translation history will appear here</p>
+                    </div>
                 </div>
             </div>
         </div>

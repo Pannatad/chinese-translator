@@ -2,9 +2,9 @@
 // Handles draggable and resizable selection box for OCR
 
 export class SelectionBox {
-    constructor(containerElement) {
+    constructor(containerElement, boxId = 'selectionBox') {
         this.container = containerElement;
-        this.box = document.getElementById('selectionBox');
+        this.box = document.getElementById(boxId);
         this.isDragging = false;
         this.isResizing = false;
         this.currentHandle = null;

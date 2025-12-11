@@ -250,4 +250,58 @@ Important rules:
         }
         throw lastError;
     }
+
+    /**
+     * Generate example sentences using a Chinese word
+     * @param {string} chineseWord - Chinese word/phrase
+     * @param {string} pinyin - Pinyin pronunciation
+     * @param {string} targetLanguage - Target language for translation
+     * @returns {Promise<Array>} - Array of example sentence objects
+     */
+    async generateExampleSentences(chineseWord, pinyin = '', targetLanguage = 'english') {
+        if (!this.apiKey || !this.genAI) {
+            throw new Error('API key not configured.');
+        }
+
+        const languageName = targetLanguage === 'thai' ? 'Thai' : 'English';
+
+        const prompt = `Generate 2 simple example sentences using the Chinese word "${chineseWord}"${pinyin ? ` (${pinyin})` : ''}.
+
+For each sentence, provide:
+1. The Chinese sentence
+2. Pinyin romanization  
+3. ${languageName} translation
+
+Keep the sentences simple and practical for a learner.
+
+Format your response as JSON array:
+[
+  {"chinese": "例句1", "pinyin": "lì jù yī", "translation": "Example sentence 1"},
+  {"chinese": "例句2", "pinyin": "lì jù èr", "translation": "Example sentence 2"}
+]
+
+ONLY output the JSON array, no other text.`;
+
+        try {
+            const model = this.genAI.getGenerativeModel({
+                model: 'gemini-2.5-flash',
+                generationConfig: { temperature: 0.7 }
+            });
+
+            const result = await model.generateContent(prompt);
+            const text = result.response.text().trim();
+
+            // Extract JSON from response
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+
+            console.warn('Could not parse example sentences response');
+            return [];
+        } catch (error) {
+            console.error('Error generating example sentences:', error);
+            throw error;
+        }
+    }
 }

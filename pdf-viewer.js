@@ -18,6 +18,96 @@ export class PDFViewer {
         this.canvas = document.getElementById('pdfCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.renderTask = null;
+
+        // Pinch-to-zoom state
+        this.isPinching = false;
+        this.pinchStartDistance = 0;
+        this.pinchStartScale = 1.0;
+        this.visualScale = 1.0;
+        this.renderDebounceTimer = null;
+
+        // Initialize pinch-to-zoom
+        this.initPinchZoom();
+    }
+
+    /**
+     * Initialize pinch-to-zoom gesture handling
+     */
+    initPinchZoom() {
+        if (!this.canvas) return;
+
+        const container = this.canvas.parentElement;
+        if (!container) return;
+
+        // Get distance between two touch points
+        const getTouchDistance = (touches) => {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        };
+
+        // Touch start - detect pinch gesture start
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                this.isPinching = true;
+                this.pinchStartDistance = getTouchDistance(e.touches);
+                this.pinchStartScale = this.scale;
+                this.visualScale = 1.0;
+            }
+        }, { passive: false });
+
+        // Touch move - apply visual transform during pinch
+        container.addEventListener('touchmove', (e) => {
+            if (this.isPinching && e.touches.length === 2) {
+                e.preventDefault();
+                const currentDistance = getTouchDistance(e.touches);
+                const scaleDelta = currentDistance / this.pinchStartDistance;
+
+                // Calculate new scale with limits
+                const newScale = Math.max(0.5, Math.min(3.0, this.pinchStartScale * scaleDelta));
+                this.visualScale = newScale / this.scale;
+
+                // Apply visual transform for smooth feedback
+                this.canvas.style.transform = `scale(${this.visualScale})`;
+                this.canvas.style.transformOrigin = 'center center';
+            }
+        }, { passive: false });
+
+        // Touch end - finish pinch and re-render
+        container.addEventListener('touchend', (e) => {
+            if (this.isPinching) {
+                this.isPinching = false;
+
+                // Calculate final scale
+                const newScale = Math.max(0.5, Math.min(3.0, this.scale * this.visualScale));
+
+                // Reset visual transform
+                this.canvas.style.transform = '';
+                this.canvas.style.transformOrigin = '';
+
+                // Only re-render if scale changed significantly
+                if (Math.abs(newScale - this.scale) > 0.05) {
+                    this.scale = newScale;
+                    this.updateZoomLevel();
+
+                    // Debounce render for performance
+                    clearTimeout(this.renderDebounceTimer);
+                    this.renderDebounceTimer = setTimeout(() => {
+                        this.renderPage(this.currentPage);
+                    }, 100);
+                }
+            }
+        });
+
+        // Touch cancel
+        container.addEventListener('touchcancel', () => {
+            if (this.isPinching) {
+                this.isPinching = false;
+                this.canvas.style.transform = '';
+                this.canvas.style.transformOrigin = '';
+            }
+        });
     }
 
     async loadPDF(file) {
