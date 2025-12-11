@@ -147,15 +147,24 @@ export class WordHighlighter {
         const chips = container.querySelectorAll('.word-chip');
 
         chips.forEach(chip => {
-            // Handle both click (desktop) and touchend (iPad/mobile)
-            const handleInteraction = (e) => {
-                e.preventDefault(); // Prevent double-firing on touch devices
+            let touchHandled = false;
+
+            // TouchSTART: Critical for iPadOS 15+ (not touchend)
+            chip.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                touchHandled = true;
                 const index = parseInt(chip.dataset.index);
                 this.highlightPair(index);
-            };
+            }, { passive: false });
 
-            chip.addEventListener('click', handleInteraction);
-            chip.addEventListener('touchend', handleInteraction);
+            // Click fallback for desktop
+            chip.addEventListener('click', (e) => {
+                if (!touchHandled) {
+                    const index = parseInt(chip.dataset.index);
+                    this.highlightPair(index);
+                }
+                touchHandled = false;
+            });
         });
     }
 
@@ -178,8 +187,8 @@ export class WordHighlighter {
                 this.highlightSideBySide(index, false);
             });
 
-            // iPad/Touch: tap to toggle highlight
-            const handleTouch = (e) => {
+            // iPad/Touch: tap to toggle highlight (use touchstart for iPadOS)
+            item.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 const index = parseInt(item.dataset.index);
 
@@ -195,9 +204,7 @@ export class WordHighlighter {
                     this.highlightSideBySide(index, true);
                     activeIndex = index;
                 }
-            };
-
-            item.addEventListener('touchend', handleTouch);
+            }, { passive: false });
         });
     }
 

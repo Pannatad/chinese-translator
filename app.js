@@ -95,7 +95,8 @@ class ChineseTranslatorApp {
     }
 
     /**
-     * Helper: Add both click and touchend for iPad/touch support
+     * Helper: Add touch-friendly click handling for iPad/touch support
+     * Uses touchstart with preventDefault (critical for iPadOS 15+)
      * @param {string} elementId - DOM element ID
      * @param {Function} handler - Event handler function
      */
@@ -103,13 +104,22 @@ class ChineseTranslatorApp {
         const el = document.getElementById(elementId);
         if (!el) return;
 
-        const wrappedHandler = (e) => {
-            e.preventDefault();
-            handler(e);
-        };
+        let touchHandled = false;
 
-        el.addEventListener('click', wrappedHandler);
-        el.addEventListener('touchend', wrappedHandler);
+        // Touchstart: Critical for iPadOS - must call preventDefault
+        el.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchHandled = true;
+            handler(e);
+        }, { passive: false });
+
+        // Click fallback for desktop (only if touch didn't handle it)
+        el.addEventListener('click', (e) => {
+            if (!touchHandled) {
+                handler(e);
+            }
+            touchHandled = false;
+        });
     }
 
     initEventListeners() {
