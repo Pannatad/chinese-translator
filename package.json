@@ -1,0 +1,19 @@
+{
+    "name": "chinese-language-tool",
+    "version": "1.0.0",
+    "description": "Chinese PDF Translator using Gemini AI Vision",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.21.0",
+        "firebase": "^12.6.0",
+        "pdfjs-dist": "^4.0.379"
+    },
+    "devDependencies": {
+        "vite": "^5.4.11"
+    }
+}

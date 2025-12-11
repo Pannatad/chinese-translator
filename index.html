@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Chinese Translator">
+    <title>Chinese Language Tool</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Main App Container -->
+    <div id="app">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">📚 Chinese Translator</h1>
+                <div class="header-actions">
+                    <!-- Credit Display (shown when logged in) -->
+                    <div id="creditDisplay" class="credit-display" style="display: none;">
+                        <span class="credit-icon">🪙</span>
+                        <span id="creditCount">0</span>
+                        <button id="redeemKeyBtn" class="redeem-btn" title="Redeem unlock key">+</button>
+                    </div>
+                    <!-- Auth Button -->
+                    <button id="authBtn" class="auth-btn">
+                        <span id="authBtnText">Login</span>
+                    </button>
+                    <button id="settingsBtn" class="icon-btn" aria-label="Settings">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M12 1v6m0 6v6m5.196-13.804l-4.243 4.243m-5.657 5.657l-4.243 4.243m18.384-4.243l-4.243-4.243m-5.657-5.657l-4.243-4.243">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Upload Area (shown when no PDF loaded) -->
+        <div id="uploadArea" class="upload-area">
+            <div class="upload-content">
+                <div class="upload-icon">📄</div>
+                <h2>Upload PDF Document</h2>
+                <p>Drop your PDF file here or click to browse</p>
+                <input type="file" id="pdfInput" accept=".pdf" hidden>
+                <button id="uploadBtn" class="primary-btn">Choose PDF File</button>
+            </div>
+        </div>
+
+        <!-- PDF Viewer Area -->
+        <div id="pdfViewerArea" class="pdf-viewer-area" style="display: none;">
+            <!-- PDF Controls -->
+            <div class="pdf-controls">
+                <div class="control-group">
+                    <button id="prevPageBtn" class="control-btn" aria-label="Previous page">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <span id="pageInfo" class="page-info">Page 1 of 1</span>
+                    <button id="nextPageBtn" class="control-btn" aria-label="Next page">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="control-group">
+                    <button id="zoomOutBtn" class="control-btn" aria-label="Zoom out">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="M21 21l-4.35-4.35"></path>
+                            <line x1="8" y1="11" x2="14" y2="11"></line>
+                        </svg>
+                    </button>
+                    <span id="zoomLevel" class="zoom-level">100%</span>
+                    <button id="zoomInBtn" class="control-btn" aria-label="Zoom in">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="M21 21l-4.35-4.35"></path>
+                            <line x1="11" y1="8" x2="11" y2="14"></line>
+                            <line x1="8" y1="11" x2="14" y2="11"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <button id="newPdfBtn" class="control-btn" aria-label="Upload new PDF">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- PDF Canvas Container -->
+            <div id="pdfContainer" class="pdf-container">
+                <canvas id="pdfCanvas"></canvas>
+
+                <!-- Selection Box -->
+                <div id="selectionBox" class="selection-box">
+                    <div class="selection-border"></div>
+                    <div class="resize-handle top-left"></div>
+                    <div class="resize-handle top-right"></div>
+                    <div class="resize-handle bottom-left"></div>
+                    <div class="resize-handle bottom-right"></div>
+                    <button id="captureBtn" class="capture-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Translate
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button id="closeSettingsBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="targetLanguage">Translation Language</label>
+                        <select id="targetLanguage" class="select-field">
+                            <option value="english">English</option>
+                            <option value="thai">ภาษาไทย (Thai)</option>
+                        </select>
+                    </div>
+
+                    <button id="saveSettingsBtn" class="primary-btn full-width">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Translation Result Modal (Enhanced with Word Highlighting) -->
+        <div id="translationModal" class="modal" style="display: none;">
+            <div class="modal-content translation-modal-enhanced">
+                <div class="modal-header">
+                    <h2>Translation Result</h2>
+                    <button id="closeTranslationBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <!-- Full Translation Section -->
+                    <div class="translation-section">
+                        <h3 id="translationLabel">Translation</h3>
+                        <div id="translatedText" class="text-box translation-result"></div>
+                    </div>
+
+                    <!-- Word Highlighting Section -->
+                    <div id="wordHighlightSection" class="translation-section" style="display: none;">
+                        <div class="highlight-toggle-container">
+                            <h3>Word-by-Word Mapping</h3>
+                            <div class="highlight-mode-toggle">
+                                <button id="clickModeBtn" class="mode-btn active">Click</button>
+                                <button id="sideBySideModeBtn" class="mode-btn">Side-by-Side</button>
+                            </div>
+                        </div>
+                        <div id="wordHighlightContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p id="loadingText">Processing...</p>
+            </div>
+        </div>
+
+        <!-- Auth Modal (Login/Signup) -->
+        <div id="authModal" class="modal" style="display: none;">
+            <div class="modal-content auth-modal-content">
+                <div class="modal-header">
+                    <h2 id="authModalTitle">Login</h2>
+                    <button id="closeAuthBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="authError" class="auth-error" style="display: none;"></div>
+
+                    <div class="setting-group">
+                        <label for="authEmail">Email</label>
+                        <input type="email" id="authEmail" placeholder="your@email.com" class="input-field">
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="authPassword">Password</label>
+                        <input type="password" id="authPassword" placeholder="••••••••" class="input-field">
+                    </div>
+
+                    <button id="authSubmitBtn" class="primary-btn full-width">Login</button>
+
+                    <div class="auth-switch">
+                        <span id="authSwitchText">Don't have an account?</span>
+                        <button id="authSwitchBtn" class="text-btn">Sign up</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Redeem Key Modal -->
+        <div id="redeemModal" class="modal" style="display: none;">
+            <div class="modal-content redeem-modal-content">
+                <div class="modal-header">
+                    <h2>🔑 Redeem Unlock Key</h2>
+                    <button id="closeRedeemBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="redeemError" class="auth-error" style="display: none;"></div>
+                    <div id="redeemSuccess" class="auth-success" style="display: none;"></div>
+
+                    <div class="setting-group">
+                        <label for="unlockKeyInput">Enter your unlock key</label>
+                        <input type="text" id="unlockKeyInput" placeholder="XXXX-XXXX-XXXX" class="input-field">
+                    </div>
+
+                    <button id="redeemSubmitBtn" class="primary-btn full-width">Redeem Key</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- No Credits Warning Modal -->
+        <div id="noCreditsModal" class="modal" style="display: none;">
+            <div class="modal-content redeem-modal-content">
+                <div class="modal-header">
+                    <h2>⚠️ No Credits</h2>
+                    <button id="closeNoCreditsBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body" style="text-align: center;">
+                    <p style="margin-bottom: 1rem;">You've run out of translation credits!</p>
+                    <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Enter an unlock key to get more
+                        credits.</p>
+                    <button id="openRedeemFromNoCredits" class="primary-btn">🔑 Redeem Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
