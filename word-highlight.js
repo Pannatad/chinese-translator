@@ -147,20 +147,27 @@ export class WordHighlighter {
         const chips = container.querySelectorAll('.word-chip');
 
         chips.forEach(chip => {
-            chip.addEventListener('click', (e) => {
+            // Handle both click (desktop) and touchend (iPad/mobile)
+            const handleInteraction = (e) => {
+                e.preventDefault(); // Prevent double-firing on touch devices
                 const index = parseInt(chip.dataset.index);
                 this.highlightPair(index);
-            });
+            };
+
+            chip.addEventListener('click', handleInteraction);
+            chip.addEventListener('touchend', handleInteraction);
         });
     }
 
     /**
-     * Attach hover handlers for side-by-side mode
+     * Attach handlers for side-by-side mode (touch-friendly)
      */
     attachSideBySideHandlers(container) {
         const items = container.querySelectorAll('.sidebyside-item');
+        let activeIndex = null;
 
         items.forEach(item => {
+            // Desktop: hover
             item.addEventListener('mouseenter', (e) => {
                 const index = parseInt(item.dataset.index);
                 this.highlightSideBySide(index, true);
@@ -170,6 +177,27 @@ export class WordHighlighter {
                 const index = parseInt(item.dataset.index);
                 this.highlightSideBySide(index, false);
             });
+
+            // iPad/Touch: tap to toggle highlight
+            const handleTouch = (e) => {
+                e.preventDefault();
+                const index = parseInt(item.dataset.index);
+
+                if (activeIndex === index) {
+                    // Tap again to deselect
+                    this.highlightSideBySide(index, false);
+                    activeIndex = null;
+                } else {
+                    // Clear previous and highlight new
+                    if (activeIndex !== null) {
+                        this.highlightSideBySide(activeIndex, false);
+                    }
+                    this.highlightSideBySide(index, true);
+                    activeIndex = index;
+                }
+            };
+
+            item.addEventListener('touchend', handleTouch);
         });
     }
 

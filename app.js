@@ -94,6 +94,24 @@ class ChineseTranslatorApp {
         }
     }
 
+    /**
+     * Helper: Add both click and touchend for iPad/touch support
+     * @param {string} elementId - DOM element ID
+     * @param {Function} handler - Event handler function
+     */
+    addTouchClick(elementId, handler) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+
+        const wrappedHandler = (e) => {
+            e.preventDefault();
+            handler(e);
+        };
+
+        el.addEventListener('click', wrappedHandler);
+        el.addEventListener('touchend', wrappedHandler);
+    }
+
     initEventListeners() {
         // Upload area
         const uploadBtn = document.getElementById('uploadBtn');
@@ -123,57 +141,74 @@ class ChineseTranslatorApp {
             });
         }
 
-        // PDF controls
-        document.getElementById('prevPageBtn').addEventListener('click', () => this.previousPage());
-        document.getElementById('nextPageBtn').addEventListener('click', () => this.nextPage());
-        document.getElementById('zoomInBtn').addEventListener('click', () => this.zoomIn());
-        document.getElementById('zoomOutBtn').addEventListener('click', () => this.zoomOut());
-        document.getElementById('newPdfBtn').addEventListener('click', () => this.resetApp());
+        // PDF controls (using touch-friendly helper)
+        this.addTouchClick('prevPageBtn', () => this.previousPage());
+        this.addTouchClick('nextPageBtn', () => this.nextPage());
+        this.addTouchClick('zoomInBtn', () => this.zoomIn());
+        this.addTouchClick('zoomOutBtn', () => this.zoomOut());
+        this.addTouchClick('newPdfBtn', () => this.resetApp());
 
         // Settings modal
-        document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
-        document.getElementById('closeSettingsBtn').addEventListener('click', () => this.closeSettings());
-        document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
+        this.addTouchClick('settingsBtn', () => this.openSettings());
+        this.addTouchClick('closeSettingsBtn', () => this.closeSettings());
+        this.addTouchClick('saveSettingsBtn', () => this.saveSettings());
 
         // Translation modal
-        document.getElementById('closeTranslationBtn').addEventListener('click', () => this.closeTranslation());
+        this.addTouchClick('closeTranslationBtn', () => this.closeTranslation());
 
         // Capture button
-        document.getElementById('captureBtn').addEventListener('click', () => this.captureAndTranslate());
+        this.addTouchClick('captureBtn', () => this.captureAndTranslate());
 
-        // Close modals on backdrop click
-        document.getElementById('settingsModal').addEventListener('click', (e) => {
+        // Close modals on backdrop click/touch
+        const settingsModal = document.getElementById('settingsModal');
+        const translationModal = document.getElementById('translationModal');
+
+        const handleSettingsBackdrop = (e) => {
             if (e.target.id === 'settingsModal') this.closeSettings();
-        });
-        document.getElementById('translationModal').addEventListener('click', (e) => {
+        };
+        const handleTranslationBackdrop = (e) => {
             if (e.target.id === 'translationModal') this.closeTranslation();
-        });
+        };
+
+        settingsModal.addEventListener('click', handleSettingsBackdrop);
+        settingsModal.addEventListener('touchend', handleSettingsBackdrop);
+        translationModal.addEventListener('click', handleTranslationBackdrop);
+        translationModal.addEventListener('touchend', handleTranslationBackdrop);
     }
 
     initAuthListeners() {
-        // Auth button (login/logout)
-        document.getElementById('authBtn').addEventListener('click', () => {
+        // Auth button (login/logout) - touch-friendly
+        const authHandler = () => {
             if (this.isLoggedIn) {
                 this.handleLogout();
             } else {
                 this.openAuthModal();
             }
+        };
+        const authBtn = document.getElementById('authBtn');
+        authBtn.addEventListener('click', authHandler);
+        authBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            authHandler();
         });
 
         // Close auth modal
-        document.getElementById('closeAuthBtn').addEventListener('click', () => this.closeAuthModal());
-        document.getElementById('authModal').addEventListener('click', (e) => {
+        this.addTouchClick('closeAuthBtn', () => this.closeAuthModal());
+        const authModal = document.getElementById('authModal');
+        const handleAuthBackdrop = (e) => {
             if (e.target.id === 'authModal') this.closeAuthModal();
-        });
+        };
+        authModal.addEventListener('click', handleAuthBackdrop);
+        authModal.addEventListener('touchend', handleAuthBackdrop);
 
         // Switch between login/signup
-        document.getElementById('authSwitchBtn').addEventListener('click', () => {
+        this.addTouchClick('authSwitchBtn', () => {
             this.isLoginMode = !this.isLoginMode;
             this.updateAuthModalUI();
         });
 
         // Submit auth form
-        document.getElementById('authSubmitBtn').addEventListener('click', () => this.handleAuthSubmit());
+        this.addTouchClick('authSubmitBtn', () => this.handleAuthSubmit());
 
         // Enter key to submit
         document.getElementById('authPassword').addEventListener('keypress', (e) => {
@@ -181,26 +216,32 @@ class ChineseTranslatorApp {
         });
 
         // Redeem key button
-        document.getElementById('redeemKeyBtn').addEventListener('click', () => this.openRedeemModal());
-        document.getElementById('closeRedeemBtn').addEventListener('click', () => this.closeRedeemModal());
-        document.getElementById('redeemModal').addEventListener('click', (e) => {
+        this.addTouchClick('redeemKeyBtn', () => this.openRedeemModal());
+        this.addTouchClick('closeRedeemBtn', () => this.closeRedeemModal());
+        const redeemModal = document.getElementById('redeemModal');
+        const handleRedeemBackdrop = (e) => {
             if (e.target.id === 'redeemModal') this.closeRedeemModal();
-        });
-        document.getElementById('redeemSubmitBtn').addEventListener('click', () => this.handleRedeemKey());
+        };
+        redeemModal.addEventListener('click', handleRedeemBackdrop);
+        redeemModal.addEventListener('touchend', handleRedeemBackdrop);
+        this.addTouchClick('redeemSubmitBtn', () => this.handleRedeemKey());
         document.getElementById('unlockKeyInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handleRedeemKey();
         });
 
         // No credits modal
-        document.getElementById('closeNoCreditsBtn').addEventListener('click', () => {
+        this.addTouchClick('closeNoCreditsBtn', () => {
             document.getElementById('noCreditsModal').style.display = 'none';
         });
-        document.getElementById('noCreditsModal').addEventListener('click', (e) => {
+        const noCreditsModal = document.getElementById('noCreditsModal');
+        const handleNoCreditsBackdrop = (e) => {
             if (e.target.id === 'noCreditsModal') {
                 document.getElementById('noCreditsModal').style.display = 'none';
             }
-        });
-        document.getElementById('openRedeemFromNoCredits').addEventListener('click', () => {
+        };
+        noCreditsModal.addEventListener('click', handleNoCreditsBackdrop);
+        noCreditsModal.addEventListener('touchend', handleNoCreditsBackdrop);
+        this.addTouchClick('openRedeemFromNoCredits', () => {
             document.getElementById('noCreditsModal').style.display = 'none';
             this.openRedeemModal();
         });
@@ -346,21 +387,28 @@ class ChineseTranslatorApp {
     }
 
     initWordHighlightListeners() {
-        // Mode toggle buttons
+        // Mode toggle buttons - touch-friendly
         const clickModeBtn = document.getElementById('clickModeBtn');
         const sideBySideModeBtn = document.getElementById('sideBySideModeBtn');
 
-        clickModeBtn.addEventListener('click', () => {
+        const handleClickMode = (e) => {
+            e.preventDefault();
             clickModeBtn.classList.add('active');
             sideBySideModeBtn.classList.remove('active');
             this.wordHighlighter.setMode('click');
-        });
+        };
 
-        sideBySideModeBtn.addEventListener('click', () => {
+        const handleSideBySideMode = (e) => {
+            e.preventDefault();
             sideBySideModeBtn.classList.add('active');
             clickModeBtn.classList.remove('active');
             this.wordHighlighter.setMode('sidebyside');
-        });
+        };
+
+        clickModeBtn.addEventListener('click', handleClickMode);
+        clickModeBtn.addEventListener('touchend', handleClickMode);
+        sideBySideModeBtn.addEventListener('click', handleSideBySideMode);
+        sideBySideModeBtn.addEventListener('touchend', handleSideBySideMode);
     }
 
     showWordHighlight(wordPairs) {
