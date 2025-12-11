@@ -95,8 +95,8 @@ class ChineseTranslatorApp {
     }
 
     /**
-     * Helper: Add touch-friendly click handling for iPad/touch support
-     * Uses touchstart with preventDefault (critical for iPadOS 15+)
+     * Helper: Add touch-friendly click handling using Pointer Events API
+     * This is the modern unified approach for mouse AND touch
      * @param {string} elementId - DOM element ID
      * @param {Function} handler - Event handler function
      */
@@ -104,21 +104,18 @@ class ChineseTranslatorApp {
         const el = document.getElementById(elementId);
         if (!el) return;
 
-        let touchHandled = false;
-
-        // Touchstart: Critical for iPadOS - must call preventDefault
-        el.addEventListener('touchstart', (e) => {
+        // Use pointerup for button-like behavior (fires for both mouse and touch)
+        el.addEventListener('pointerup', (e) => {
             e.preventDefault();
-            touchHandled = true;
-            handler(e);
-        }, { passive: false });
-
-        // Click fallback for desktop (only if touch didn't handle it)
-        el.addEventListener('click', (e) => {
-            if (!touchHandled) {
+            // Only respond to primary pointer (left mouse or first touch)
+            if (e.isPrimary) {
                 handler(e);
             }
-            touchHandled = false;
+        });
+
+        // Prevent default touch behaviors that might interfere
+        el.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
         });
     }
 
@@ -255,6 +252,31 @@ class ChineseTranslatorApp {
             document.getElementById('noCreditsModal').style.display = 'none';
             this.openRedeemModal();
         });
+
+        // Guest no credits modal
+        this.addTouchClick('closeGuestNoCreditsBtn', () => {
+            document.getElementById('guestNoCreditsModal').style.display = 'none';
+        });
+        const guestNoCreditsModal = document.getElementById('guestNoCreditsModal');
+        const handleGuestNoCreditsBackdrop = (e) => {
+            if (e.target.id === 'guestNoCreditsModal') {
+                document.getElementById('guestNoCreditsModal').style.display = 'none';
+            }
+        };
+        guestNoCreditsModal.addEventListener('click', handleGuestNoCreditsBackdrop);
+        guestNoCreditsModal.addEventListener('touchend', handleGuestNoCreditsBackdrop);
+        this.addTouchClick('guestLoginBtn', () => {
+            document.getElementById('guestNoCreditsModal').style.display = 'none';
+            this.isLoginMode = false; // Start with signup
+            this.openAuthModal();
+        });
+    }
+
+    /**
+     * Show modal prompting guests to sign up for more credits
+     */
+    showGuestNoCreditsModal() {
+        document.getElementById('guestNoCreditsModal').style.display = 'flex';
     }
 
     async handleAuthStateChange(user) {
@@ -262,21 +284,28 @@ class ChineseTranslatorApp {
         const authBtn = document.getElementById('authBtn');
         const authBtnText = document.getElementById('authBtnText');
         const creditDisplay = document.getElementById('creditDisplay');
+        const redeemKeyBtn = document.getElementById('redeemKeyBtn');
 
         if (user) {
             // Logged in
             authBtn.classList.add('logged-in');
             authBtnText.textContent = 'Logout';
             creditDisplay.style.display = 'flex';
+            redeemKeyBtn.style.display = 'flex'; // Show redeem button for logged in users
 
             // Load credits
             const credits = await this.creditService.getCredits();
             document.getElementById('creditCount').textContent = credits;
         } else {
-            // Logged out
+            // Guest user - still show credits!
             authBtn.classList.remove('logged-in');
             authBtnText.textContent = 'Login';
-            creditDisplay.style.display = 'none';
+            creditDisplay.style.display = 'flex'; // Show credits for guests too
+            redeemKeyBtn.style.display = 'none'; // Hide redeem button for guests
+
+            // Load guest credits
+            const guestCredits = await this.creditService.getCredits();
+            document.getElementById('creditCount').textContent = guestCredits;
         }
     }
 
@@ -518,18 +547,16 @@ class ChineseTranslatorApp {
     }
 
     async captureAndTranslate() {
-        // Check if user is logged in
-        if (!this.isLoggedIn) {
-            this.showError('Please login to translate');
-            this.openAuthModal();
-            return;
-        }
-
-        // Check credits before translating
+        // Check credits before translating (works for both guests and logged in users)
         const creditResult = await this.creditService.useCredit();
         if (!creditResult.success) {
-            // Show no credits modal
-            document.getElementById('noCreditsModal').style.display = 'flex';
+            // Check if guest ran out of credits
+            if (creditResult.promptLogin) {
+                this.showGuestNoCreditsModal();
+            } else {
+                // Show regular no credits modal for logged in users
+                document.getElementById('noCreditsModal').style.display = 'flex';
+            }
             return;
         }
 

@@ -272,7 +272,7 @@
             </div>
         </div>
 
-        <!-- No Credits Warning Modal -->
+        <!-- No Credits Warning Modal (for logged in users) -->
         <div id="noCreditsModal" class="modal" style="display: none;">
             <div class="modal-content redeem-modal-content">
                 <div class="modal-header">
@@ -290,6 +290,30 @@
                     <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Enter an unlock key to get more
                         credits.</p>
                     <button id="openRedeemFromNoCredits" class="primary-btn">🔑 Redeem Key</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guest No Credits Modal (for guests) -->
+        <div id="guestNoCreditsModal" class="modal" style="display: none;">
+            <div class="modal-content redeem-modal-content">
+                <div class="modal-header">
+                    <h2>🎁 Get More Credits!</h2>
+                    <button id="closeGuestNoCreditsBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body" style="text-align: center;">
+                    <p style="margin-bottom: 1rem; font-size: 1.1rem;">You've used all your <strong>10 free guest
+                            credits</strong>!</p>
+                    <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Create a free account to get <strong
+                            style="color: #4caf50;">20 more credits</strong> instantly!</p>
+                    <button id="guestLoginBtn" class="primary-btn"
+                        style="background: linear-gradient(135deg, #4caf50, #8bc34a);">✨ Sign Up for 20 Credits</button>
                 </div>
             </div>
         </div>

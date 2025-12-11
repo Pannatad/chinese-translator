@@ -23,18 +23,22 @@ const VALID_KEYS = {
 export class CreditService {
     constructor() {
         this.cachedCredits = null;
+        this.GUEST_INITIAL_CREDITS = 10;
+        this.GUEST_STORAGE_KEY = 'guestCredits';
     }
 
     /**
-     * Get current user's credit balance
+     * Get current user's credit balance (supports guest users)
      */
     async getCredits() {
         const user = auth.currentUser;
+
+        // Guest user: use localStorage
         if (!user) {
-            console.warn('No user logged in');
-            return 0;
+            return this.getGuestCredits();
         }
 
+        // Logged in user: use Firestore
         try {
             const docRef = doc(db, 'users', user.uid);
             const docSnap = await getDoc(docRef);
@@ -51,15 +55,38 @@ export class CreditService {
     }
 
     /**
+     * Get guest credits from localStorage
+     */
+    getGuestCredits() {
+        const stored = localStorage.getItem(this.GUEST_STORAGE_KEY);
+        if (stored === null) {
+            // First time guest - give them free credits
+            localStorage.setItem(this.GUEST_STORAGE_KEY, this.GUEST_INITIAL_CREDITS.toString());
+            return this.GUEST_INITIAL_CREDITS;
+        }
+        return parseInt(stored, 10) || 0;
+    }
+
+    /**
+     * Set guest credits in localStorage
+     */
+    setGuestCredits(credits) {
+        localStorage.setItem(this.GUEST_STORAGE_KEY, credits.toString());
+    }
+
+    /**
      * Use one credit for a translation
      * Returns true if successful, false if no credits available
      */
     async useCredit() {
         const user = auth.currentUser;
+
+        // Guest user: use localStorage credits
         if (!user) {
-            return { success: false, error: 'Please login to translate' };
+            return this.useGuestCredit();
         }
 
+        // Logged in user: use Firestore
         try {
             const docRef = doc(db, 'users', user.uid);
             const docSnap = await getDoc(docRef);
@@ -85,6 +112,26 @@ export class CreditService {
             console.error('Error using credit:', error);
             return { success: false, error: 'Failed to use credit' };
         }
+    }
+
+    /**
+     * Use guest credit from localStorage
+     */
+    useGuestCredit() {
+        const currentCredits = this.getGuestCredits();
+
+        if (currentCredits <= 0) {
+            return {
+                success: false,
+                error: 'No guest credits remaining',
+                isGuest: true,
+                promptLogin: true
+            };
+        }
+
+        const newCredits = currentCredits - 1;
+        this.setGuestCredits(newCredits);
+        return { success: true, remainingCredits: newCredits, isGuest: true };
     }
 
     /**

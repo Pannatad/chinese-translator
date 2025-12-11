@@ -226,10 +226,13 @@ export class SelectionBox {
         } else {
             stickyNote.innerHTML = `
                 <div class="sticky-note-content">
-                    <button class="sticky-note-close" onclick="window.app.selectionBox.hideStickyNote()">×</button>
+                    <button class="sticky-note-close">×</button>
                     <p>${text}</p>
                 </div>
             `;
+            // Attach event listener using Pointer Events for iPad
+            const closeBtn = stickyNote.querySelector('.sticky-note-close');
+            this.attachPointerHandler(closeBtn, () => this.hideStickyNote());
         }
 
         this.box.appendChild(stickyNote);
@@ -240,14 +243,30 @@ export class SelectionBox {
         if (overlay) {
             overlay.innerHTML = `
                 <div class="sticky-note-content">
-                    <button class="sticky-note-close" onclick="window.app.selectionBox.hideStickyNote()">×</button>
+                    <button class="sticky-note-close">×</button>
                     <p>${text}</p>
-                    <button class="sticky-note-details-btn" onclick="window.app.openTranslationModal()">
+                    <button class="sticky-note-details-btn">
                         📚 View Word-by-Word
                     </button>
                 </div>
             `;
+            // Attach event listeners using Pointer Events for iPad
+            const closeBtn = overlay.querySelector('.sticky-note-close');
+            const detailsBtn = overlay.querySelector('.sticky-note-details-btn');
+            this.attachPointerHandler(closeBtn, () => this.hideStickyNote());
+            this.attachPointerHandler(detailsBtn, () => window.app.openTranslationModal());
         }
+    }
+
+    // Helper for iPad-compatible pointer events
+    attachPointerHandler(element, handler) {
+        if (!element) return;
+        element.addEventListener('pointerdown', (e) => e.preventDefault());
+        element.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.isPrimary) handler();
+        });
     }
 
     hideStickyNote() {

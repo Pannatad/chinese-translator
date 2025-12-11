@@ -147,23 +147,18 @@ export class WordHighlighter {
         const chips = container.querySelectorAll('.word-chip');
 
         chips.forEach(chip => {
-            let touchHandled = false;
-
-            // TouchSTART: Critical for iPadOS 15+ (not touchend)
-            chip.addEventListener('touchstart', (e) => {
+            // Prevent default on pointerdown
+            chip.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
-                touchHandled = true;
-                const index = parseInt(chip.dataset.index);
-                this.highlightPair(index);
-            }, { passive: false });
+            });
 
-            // Click fallback for desktop
-            chip.addEventListener('click', (e) => {
-                if (!touchHandled) {
+            // Use pointerup for the action (works for both mouse and touch)
+            chip.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                if (e.isPrimary) {
                     const index = parseInt(chip.dataset.index);
                     this.highlightPair(index);
                 }
-                touchHandled = false;
             });
         });
     }
@@ -187,9 +182,15 @@ export class WordHighlighter {
                 this.highlightSideBySide(index, false);
             });
 
-            // iPad/Touch: tap to toggle highlight (use touchstart for iPadOS)
-            item.addEventListener('touchstart', (e) => {
+            // iPad/Touch: Use Pointer Events (unified approach)
+            item.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
+            });
+
+            item.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                if (!e.isPrimary) return;
+
                 const index = parseInt(item.dataset.index);
 
                 if (activeIndex === index) {
@@ -204,7 +205,7 @@ export class WordHighlighter {
                     this.highlightSideBySide(index, true);
                     activeIndex = index;
                 }
-            }, { passive: false });
+            });
         });
     }
 
