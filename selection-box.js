@@ -15,10 +15,71 @@ export class SelectionBox {
         this.startLeft = 0;
         this.startTop = 0;
 
-        this.minWidth = 100;
-        this.minHeight = 80;
+        // Reduced minimum size for small text selections
+        this.minWidth = 50;
+        this.minHeight = 40;
+
+        // Callback when drag/resize ends (for debounced translation)
+        this.onMoveEnd = null;
+
+        // Store position as percentage of container for zoom resilience
+        this.positionPercent = { left: 50, top: 50 };
+        this.sizePercent = { width: 30, height: 25 };
 
         this.initEventListeners();
+        this.initResizeObserver();
+    }
+
+    /**
+     * Initialize ResizeObserver to handle container size changes (zoom)
+     */
+    initResizeObserver() {
+        if (typeof ResizeObserver !== 'undefined') {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.syncPositionFromPercent();
+            });
+            this.resizeObserver.observe(this.container);
+        }
+    }
+
+    /**
+     * Convert current pixel position to percentage
+     */
+    updatePercentFromPixels() {
+        const containerRect = this.container.getBoundingClientRect();
+        const boxRect = this.box.getBoundingClientRect();
+
+        const left = boxRect.left - containerRect.left;
+        const top = boxRect.top - containerRect.top;
+
+        this.positionPercent = {
+            left: (left / containerRect.width) * 100,
+            top: (top / containerRect.height) * 100
+        };
+        this.sizePercent = {
+            width: (boxRect.width / containerRect.width) * 100,
+            height: (boxRect.height / containerRect.height) * 100
+        };
+    }
+
+    /**
+     * Apply percentage position to pixels (called on container resize)
+     */
+    syncPositionFromPercent() {
+        if (this.isDragging || this.isResizing) return; // Don't interfere during interaction
+
+        const containerRect = this.container.getBoundingClientRect();
+
+        const left = (this.positionPercent.left / 100) * containerRect.width;
+        const top = (this.positionPercent.top / 100) * containerRect.height;
+        const width = Math.max(this.minWidth, (this.sizePercent.width / 100) * containerRect.width);
+        const height = Math.max(this.minHeight, (this.sizePercent.height / 100) * containerRect.height);
+
+        this.box.style.left = left + 'px';
+        this.box.style.top = top + 'px';
+        this.box.style.width = width + 'px';
+        this.box.style.height = height + 'px';
+        this.box.style.transform = 'none';
     }
 
     initEventListeners() {
@@ -154,6 +215,8 @@ export class SelectionBox {
     }
 
     handleEnd(e) {
+        const wasMoving = this.isDragging || this.isResizing;
+
         if (this.isDragging) {
             this.box.style.cursor = 'move';
         }
@@ -161,6 +224,16 @@ export class SelectionBox {
         this.isDragging = false;
         this.isResizing = false;
         this.currentHandle = null;
+
+        // Save position as percentage for zoom resilience
+        if (wasMoving) {
+            this.updatePercentFromPixels();
+
+            // Trigger callback for debounced translation
+            if (this.onMoveEnd && typeof this.onMoveEnd === 'function') {
+                this.onMoveEnd();
+            }
+        }
     }
 
     getPosition() {
@@ -203,59 +276,136 @@ export class SelectionBox {
         this.box.style.left = '50%';
         this.box.style.top = '50%';
         this.box.style.transform = 'translate(-50%, -50%)';
+
+        // Reset percentage position
+        this.positionPercent = { left: 50, top: 50 };
+        this.sizePercent = { width: 30, height: 25 };
+
         this.hideStickyNote();
     }
 
-    // STICKY NOTE MODE - Overlay translation on the selection box
+    // STICKY NOTE MODE - Floating translation card BELOW the selection box
     showStickyNote(text, isLoading = false) {
         // Remove existing sticky note if any
         this.hideStickyNote();
 
-        // Create sticky note element
+        // Create sticky note container
         const stickyNote = document.createElement('div');
         stickyNote.id = 'stickyNoteOverlay';
-        stickyNote.className = 'sticky-note-overlay';
+        stickyNote.className = 'sticky-note-floating';
 
         if (isLoading) {
             stickyNote.innerHTML = `
-                <div class="sticky-note-loading">
+                <div class="sticky-note-card loading">
                     <span class="loading-spinner-small"></span>
-                    <span>${text}</span>
+                    <span class="loading-text">${text}</span>
                 </div>
             `;
         } else {
             stickyNote.innerHTML = `
-                <div class="sticky-note-content">
-                    <button class="sticky-note-close">×</button>
-                    <p>${text}</p>
+                <div class="sticky-note-card">
+                    <button class="sticky-note-close-v2">×</button>
+                    <p class="sticky-note-text">${text}</p>
                 </div>
             `;
             // Attach event listener using Pointer Events for iPad
-            const closeBtn = stickyNote.querySelector('.sticky-note-close');
+            const closeBtn = stickyNote.querySelector('.sticky-note-close-v2');
             this.attachPointerHandler(closeBtn, () => this.hideStickyNote());
         }
 
-        this.box.appendChild(stickyNote);
+        // Position below the selection box
+        this.positionStickyNote(stickyNote);
+        this.container.appendChild(stickyNote);
+    }
+
+    /**
+     * Position the sticky note below the selection box
+     */
+    positionStickyNote(stickyNote) {
+        const boxRect = this.box.getBoundingClientRect();
+        const containerRect = this.container.getBoundingClientRect();
+
+        stickyNote.style.position = 'absolute';
+        stickyNote.style.left = (boxRect.left - containerRect.left) + 'px';
+        stickyNote.style.top = (boxRect.bottom - containerRect.top + 80) + 'px'; // 80px below for buttons with spacing
+        stickyNote.style.width = boxRect.width + 'px';
+        stickyNote.style.maxWidth = '400px';
     }
 
     updateStickyNote(text) {
-        const overlay = document.getElementById('stickyNoteOverlay');
+        let overlay = document.getElementById('stickyNoteOverlay');
+
+        if (!overlay) {
+            // Create new one if doesn't exist
+            this.showStickyNote(text, false);
+            overlay = document.getElementById('stickyNoteOverlay');
+        }
+
         if (overlay) {
             overlay.innerHTML = `
-                <div class="sticky-note-content">
-                    <button class="sticky-note-close">×</button>
-                    <p>${text}</p>
-                    <button class="sticky-note-details-btn">
-                        📚 View Word-by-Word
-                    </button>
+                <div class="sticky-note-card">
+                    <button class="sticky-note-close-v2">×</button>
+                    <p class="sticky-note-text">${text}</p>
                 </div>
             `;
-            // Attach event listeners using Pointer Events for iPad
-            const closeBtn = overlay.querySelector('.sticky-note-close');
-            const detailsBtn = overlay.querySelector('.sticky-note-details-btn');
+            // Reposition in case box moved
+            this.positionStickyNote(overlay);
+
+            // Attach close button handler
+            const closeBtn = overlay.querySelector('.sticky-note-close-v2');
             this.attachPointerHandler(closeBtn, () => this.hideStickyNote());
-            this.attachPointerHandler(detailsBtn, () => window.app.openTranslationModal());
         }
+
+        // Create/update floating word-by-word button OUTSIDE the box
+        this.showFloatingDetailsButton();
+    }
+
+    /**
+     * Show floating "View Word-by-Word" button BESIDE the Translate button
+     */
+    showFloatingDetailsButton() {
+        // Remove existing button if any
+        let floatingBtn = document.getElementById('floatingDetailsBtn');
+        if (floatingBtn) floatingBtn.remove();
+
+        // Create floating button
+        floatingBtn = document.createElement('button');
+        floatingBtn.id = 'floatingDetailsBtn';
+        floatingBtn.className = 'floating-details-btn';
+        floatingBtn.innerHTML = '📚 Word-by-Word';
+
+        // Position beside the capture button (to the right of it)
+        const captureBtn = this.box.querySelector('.capture-btn');
+        const boxRect = this.box.getBoundingClientRect();
+        const containerRect = this.container.getBoundingClientRect();
+
+        floatingBtn.style.position = 'absolute';
+
+        if (captureBtn) {
+            // Position to the right of the capture button with more gap
+            const captureBtnRect = captureBtn.getBoundingClientRect();
+            floatingBtn.style.left = (captureBtnRect.right - containerRect.left + 20) + 'px'; // 20px gap
+            floatingBtn.style.top = (captureBtnRect.top - containerRect.top) + 'px';
+            floatingBtn.style.transform = 'none';
+        } else {
+            // Fallback: position below the box to the right of center
+            floatingBtn.style.left = (boxRect.left - containerRect.left + boxRect.width / 2 + 80) + 'px';
+            floatingBtn.style.top = (boxRect.bottom - containerRect.top + 10) + 'px';
+            floatingBtn.style.transform = 'translateX(-50%)';
+        }
+
+        this.container.appendChild(floatingBtn);
+
+        // Attach handler
+        this.attachPointerHandler(floatingBtn, () => window.app.openTranslationModal());
+    }
+
+    /**
+     * Hide floating details button
+     */
+    hideFloatingDetailsButton() {
+        const floatingBtn = document.getElementById('floatingDetailsBtn');
+        if (floatingBtn) floatingBtn.remove();
     }
 
     // Helper for iPad-compatible pointer events
@@ -274,5 +424,7 @@ export class SelectionBox {
         if (existing) {
             existing.remove();
         }
+        this.hideFloatingDetailsButton();
     }
 }
+

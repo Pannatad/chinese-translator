@@ -946,31 +946,59 @@ class ChineseTranslatorApp {
         if (this.pdfLiveModeActive) {
             // Deactivate
             this.pdfLiveModeActive = false;
-            if (this.pdfLiveModeInterval) {
-                clearInterval(this.pdfLiveModeInterval);
-                this.pdfLiveModeInterval = null;
-            }
-            btn.classList.remove('active');
 
-            // Clear any sticky note
+            // Clear debounce timer
+            if (this.liveTranslateDebounceTimer) {
+                clearTimeout(this.liveTranslateDebounceTimer);
+                this.liveTranslateDebounceTimer = null;
+            }
+
+            // Remove onMoveEnd callback
             if (this.selectionBox) {
+                this.selectionBox.onMoveEnd = null;
                 this.selectionBox.hideStickyNote();
             }
+
+            btn.classList.remove('active');
         } else {
             // Activate
             this.pdfLiveModeActive = true;
+            this.translationInProgress = false;
             btn.classList.add('active');
+
+            // Set up debounced translation on box movement
+            if (this.selectionBox) {
+                this.selectionBox.onMoveEnd = () => {
+                    this.scheduleDebounceTranslation();
+                };
+            }
 
             // Initial translation
             this.pdfLiveTranslate();
-
-            // Set up interval for continuous translation
-            this.pdfLiveModeInterval = setInterval(() => {
-                if (this.pdfLiveModeActive) {
-                    this.pdfLiveTranslate();
-                }
-            }, 3000); // Every 3 seconds
         }
+    }
+
+    /**
+     * Schedule a debounced translation (800ms after box stops moving)
+     */
+    scheduleDebounceTranslation() {
+        // Clear any existing timer
+        if (this.liveTranslateDebounceTimer) {
+            clearTimeout(this.liveTranslateDebounceTimer);
+        }
+
+        // Don't schedule if translation is already in progress
+        // (wait for current one to finish, then onMoveEnd will retrigger)
+        if (this.translationInProgress) {
+            return;
+        }
+
+        // Schedule translation after 800ms of no movement
+        this.liveTranslateDebounceTimer = setTimeout(() => {
+            if (this.pdfLiveModeActive) {
+                this.pdfLiveTranslate();
+            }
+        }, 800);
     }
 
     /**
@@ -981,6 +1009,13 @@ class ChineseTranslatorApp {
             return;
         }
 
+        // Prevent concurrent translations
+        if (this.translationInProgress) {
+            return;
+        }
+
+        this.translationInProgress = true;
+
         try {
             // Show loading state on sticky note
             this.selectionBox.showStickyNote('⏳ Translating...', true);
@@ -989,6 +1024,7 @@ class ChineseTranslatorApp {
             const position = this.selectionBox.getCanvasPosition(this.pdfViewer.canvas);
             if (!position) {
                 this.selectionBox.updateStickyNote('Move selection to translate');
+                this.translationInProgress = false;
                 return;
             }
 
@@ -1001,6 +1037,7 @@ class ChineseTranslatorApp {
 
             if (!imageData) {
                 this.selectionBox.updateStickyNote('No image captured');
+                this.translationInProgress = false;
                 return;
             }
 
@@ -1013,9 +1050,11 @@ class ChineseTranslatorApp {
             const dataUrl = tempCanvas.toDataURL('image/png');
             const base64 = dataUrl.split(',')[1];
 
+            const visionPayload = { mimeType: 'image/png', data: base64 };
+
             // Translate
             const translation = await this.translationService.translate(
-                { mimeType: 'image/png', data: base64 },
+                visionPayload,
                 this.settings.targetLanguage,
                 (partial) => this.selectionBox.updateStickyNote(partial)
             );
@@ -1023,12 +1062,20 @@ class ChineseTranslatorApp {
             // Show result
             if (translation) {
                 this.selectionBox.updateStickyNote(translation);
+
+                // Update modal content for View Word-by-Word
+                document.getElementById('translatedText').textContent = translation;
+
+                // Fetch word pairs in background for View Word-by-Word feature
+                this.fetchWordPairs(visionPayload);
             } else {
                 this.selectionBox.updateStickyNote('No Chinese text detected');
             }
         } catch (error) {
             console.error('Live translation error:', error);
-            this.selectionBox.updateStickyNote('Error - retrying...');
+            this.selectionBox.updateStickyNote('Error - try moving the box');
+        } finally {
+            this.translationInProgress = false;
         }
     }
 
@@ -1287,9 +1334,12 @@ class ChineseTranslatorApp {
         // Stop live mode if active
         if (this.pdfLiveModeActive) {
             this.pdfLiveModeActive = false;
-            if (this.pdfLiveModeInterval) {
-                clearInterval(this.pdfLiveModeInterval);
-                this.pdfLiveModeInterval = null;
+            if (this.liveTranslateDebounceTimer) {
+                clearTimeout(this.liveTranslateDebounceTimer);
+                this.liveTranslateDebounceTimer = null;
+            }
+            if (this.selectionBox) {
+                this.selectionBox.onMoveEnd = null;
             }
             const liveBtn = document.getElementById('liveTranslateModeBtn');
             if (liveBtn) liveBtn.classList.remove('active');

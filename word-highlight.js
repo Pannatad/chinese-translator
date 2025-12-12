@@ -67,13 +67,12 @@ export class WordHighlighter {
         const html = `
             <div class="word-highlight-container click-mode">
                 <div class="highlight-section">
-                    <h4>中文 (Chinese) <span class="hint-text">(tap word for examples)</span></h4>
+                    <h4>中文 (Chinese)</h4>
                     <div class="word-row chinese-row">
                         ${this.wordPairs.map((pair, index) => `
                             <span class="word-chip chinese-chip" data-index="${index}">
                                 <span class="word-text">${pair.chinese}</span>
                                 <span class="word-pinyin">${pair.pinyin}</span>
-                                <button class="example-btn" data-index="${index}" title="Generate example sentences">📝</button>
                             </span>
                         `).join('')}
                     </div>
@@ -87,6 +86,10 @@ export class WordHighlighter {
                             </span>
                         `).join('')}
                     </div>
+                </div>
+                <div class="word-action-bar" id="wordActionBar" style="display: none;">
+                    <span class="selected-word-label" id="selectedWordLabel"></span>
+                    <button class="example-action-btn" id="generateExampleBtn">📝 Generate Examples</button>
                 </div>
                 <div id="exampleSentencePopover" class="example-popover" style="display: none;">
                     <div class="example-popover-content">
@@ -118,11 +121,11 @@ export class WordHighlighter {
                         `).join('')}
                     </div>
                     <div class="sidebyside-lines">
-                        <svg class="connection-lines" width="100" height="${this.wordPairs.length * 50}">
+                        <svg class="connection-lines" width="40" height="${this.wordPairs.length * 70}">
                             ${this.wordPairs.map((_, index) => `
                                 <line 
-                                    x1="0" y1="${index * 50 + 25}" 
-                                    x2="100" y2="${index * 50 + 25}" 
+                                    x1="0" y1="${index * 70 + 30}" 
+                                    x2="40" y2="${index * 70 + 30}" 
                                     class="connection-line" 
                                     data-index="${index}"
                                     stroke="rgba(102, 126, 234, 0.3)" 
@@ -165,29 +168,29 @@ export class WordHighlighter {
                 if (e.isPrimary) {
                     const index = parseInt(chip.dataset.index);
                     this.highlightPair(index);
+                    this.showActionBar(index);
                 }
             });
         });
 
-        // Handle example button clicks
-        const exampleBtns = container.querySelectorAll('.example-btn');
-        exampleBtns.forEach(btn => {
-            btn.addEventListener('pointerdown', (e) => {
+        // Handle Generate Examples button click
+        const generateBtn = container.querySelector('#generateExampleBtn');
+        if (generateBtn) {
+            generateBtn.addEventListener('pointerdown', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
             });
-            btn.addEventListener('pointerup', (e) => {
+            generateBtn.addEventListener('pointerup', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                if (e.isPrimary) {
-                    const index = parseInt(btn.dataset.index);
-                    const pair = this.wordPairs[index];
+                if (e.isPrimary && this.activeWordIndex !== null) {
+                    const pair = this.wordPairs[this.activeWordIndex];
                     if (pair && this.onGenerateExample) {
                         this.onGenerateExample(pair.chinese, pair.pinyin);
                     }
                 }
             });
-        });
+        }
 
         // Handle popover close button
         const closeBtn = container.querySelector('.example-popover-close');
@@ -196,6 +199,30 @@ export class WordHighlighter {
                 e.stopPropagation();
                 this.hideExamplePopover();
             });
+        }
+    }
+
+    /**
+     * Show action bar with selected word info
+     */
+    showActionBar(index) {
+        const actionBar = document.getElementById('wordActionBar');
+        const label = document.getElementById('selectedWordLabel');
+
+        if (actionBar && label && this.wordPairs[index]) {
+            const pair = this.wordPairs[index];
+            label.textContent = `${pair.chinese} (${pair.pinyin})`;
+            actionBar.style.display = 'flex';
+        }
+    }
+
+    /**
+     * Hide action bar
+     */
+    hideActionBar() {
+        const actionBar = document.getElementById('wordActionBar');
+        if (actionBar) {
+            actionBar.style.display = 'none';
         }
     }
 

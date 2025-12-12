@@ -1,307 +1,184 @@
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * TRANSLATION SERVICE
+ * ═══════════════════════════════════════════════════════════════
+ * 
+ * This is the main service that your app uses for translations.
+ * It now uses the PROVIDER PATTERN - meaning you can easily swap
+ * between Gemini API and your own custom model!
+ * 
+ * HOW IT WORKS:
+ * 
+ *   ┌─────────────────────────────────────────────────────────┐
+ *   │                     Your App (app.js)                   │
+ *   │   - Calls translationService.translate()                │
+ *   │   - Doesn't need to know which provider is used!        │
+ *   └─────────────────────────────────────────────────────────┘
+ *                              │
+ *                              ▼
+ *   ┌─────────────────────────────────────────────────────────┐
+ *   │                  TranslationService                     │
+ *   │   - Acts as a "wrapper" around the actual provider      │
+ *   │   - Handles API key configuration                       │
+ *   └─────────────────────────────────────────────────────────┘
+ *                              │
+ *                              ▼
+ *   ┌─────────────────────────────────────────────────────────┐
+ *   │                   Provider Factory                       │
+ *   │   - Reads config to decide which provider to use        │
+ *   │   - Returns either GeminiProvider or CustomModelProvider │
+ *   └─────────────────────────────────────────────────────────┘
+ *                              │
+ *              ┌───────────────┴───────────────┐
+ *              ▼                               ▼
+ *   ┌───────────────────┐           ┌───────────────────┐
+ *   │  GeminiProvider   │           │ CustomModelProvider│
+ *   │  (Current)        │           │  (Your Future!)    │
+ *   └───────────────────┘           └───────────────────┘
+ * 
+ * SWITCHING PROVIDERS:
+ *   Just change VITE_TRANSLATION_PROVIDER in your .env file!
+ *   - 'gemini' → Uses Google's Gemini API (default)
+ *   - 'custom' → Uses your own trained model
+ */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createTranslationProvider, createHybridProvider } from './providers/provider-factory.js';
 
 export class TranslationService {
     constructor() {
-        this.apiKey = null;
-        this.genAI = null;
+        this.provider = null;
+        this.providerConfig = {
+            provider: 'gemini',        // Default provider
+            geminiApiKey: null,
+            customModelUrl: null,
+            customModelApiKey: null
+        };
     }
 
+    /**
+     * Configure the Gemini API key (backwards compatible with existing code)
+     * @param {string} apiKey - Gemini API key
+     */
     setApiKey(apiKey) {
-        this.apiKey = apiKey;
-        if (apiKey) {
-            console.log(`API Key configured (Length: ${apiKey.length})`);
-            this.genAI = new GoogleGenerativeAI(this.apiKey);
+        this.providerConfig.geminiApiKey = apiKey;
+
+        // Read provider type from environment (if using Vite)
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            this.providerConfig.provider = import.meta.env.VITE_TRANSLATION_PROVIDER || 'gemini';
+            this.providerConfig.customModelUrl = import.meta.env.VITE_CUSTOM_MODEL_URL || null;
+            this.providerConfig.customModelApiKey = import.meta.env.VITE_CUSTOM_MODEL_API_KEY || null;
+        }
+
+        // Create the provider
+        this._initProvider();
+    }
+
+    /**
+     * Advanced: Manually configure provider settings
+     * @param {object} config - Full provider configuration
+     */
+    configure(config) {
+        this.providerConfig = { ...this.providerConfig, ...config };
+        this._initProvider();
+    }
+
+    /**
+     * Initialize the provider based on current config
+     */
+    _initProvider() {
+        try {
+            // Check if hybrid mode is requested
+            if (this.providerConfig.provider === 'hybrid') {
+                this.provider = createHybridProvider(this.providerConfig);
+            } else {
+                this.provider = createTranslationProvider(this.providerConfig);
+            }
+            console.log(`[TranslationService] Using: ${this.provider.getName()}`);
+        } catch (error) {
+            console.error('[TranslationService] Failed to create provider:', error);
+            this.provider = null;
         }
     }
 
     /**
+     * Get the current provider name
+     * @returns {string} Provider name
+     */
+    getProviderName() {
+        return this.provider?.getName() || 'None';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PUBLIC API (Same interface as before - no changes needed in app.js!)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
      * Translates text or image with optional streaming support
-     * @param {string|object} input - Text string OR Image Data object { mimeType, data }
+     * @param {string|object} input - Text string OR Image Data { mimeType, data }
      * @param {string} targetLanguage - Target language
-     * @param {function} onStreamUpdate - Optional callback for streaming updates (Text only)
+     * @param {function} onStreamUpdate - Optional callback for streaming
      * @returns {Promise<string>} - Final translated text
      */
     async translate(input, targetLanguage = 'english', onStreamUpdate = null) {
-        if (!this.apiKey || !this.genAI) {
-            throw new Error('API key not configured. Please check your settings.');
+        if (!this.provider) {
+            throw new Error('Translation provider not configured. Please check your settings.');
         }
-
-        const languageName = targetLanguage === 'thai' ? 'Thai (ภาษาไทย)' : 'English';
-
-        let payload;
-
-        if (typeof input === 'string') {
-            // Text mode - simple string prompt works
-            payload = `Translate this text to ${languageName}:\n${input}`;
-        } else if (typeof input === 'object' && input.data) {
-            // Vision Mode - Per Google Docs, array format requires objects
-            // https://ai.google.dev/gemini-api/docs/image-understanding
-            const imagePart = {
-                inlineData: {
-                    mimeType: input.mimeType || "image/jpeg",
-                    data: input.data
-                }
-            };
-            // Text MUST be wrapped as { text: "..." } in array format!
-            // UPDATED: Ask to preserve layout (bullet points, line breaks)
-            const textPart = {
-                text: `Transcribe and translate the text in this image to ${languageName}. 
-IMPORTANT: Preserve the original layout structure. If the text has bullet points, keep each item on a separate line with a bullet (•). 
-If there are multiple lines, translate each line separately and maintain the line breaks.
-Output ONLY the translation, maintaining the same visual structure as the original.` };
-
-            payload = [imagePart, textPart]; // Docs show image first, then text
-        }
-
-        console.time('TranslationAPI');
-
-        try {
-            // STRATEGY: Speed-First Daisy Chain
-            // 1. Try gemini-2.5-flash (FAST - Recommended)
-            // 2. Fallback to gemini-3-pro-preview (Slow but powerful)
-            // 3. Last Resort: gemini-1.5-flash (Reliable)
-
-            try {
-                // Priority 1 - FAST
-                console.log('Attempting Priority 1: gemini-2.5-flash (Fast)');
-                const model = this.genAI.getGenerativeModel({
-                    model: "gemini-2.5-flash",
-                    generationConfig: { temperature: 0.1, candidateCount: 1 }
-                });
-                const result = await this._generateWithTimeout(model, payload, onStreamUpdate, 45000); // 45s timeout
-                console.timeEnd('TranslationAPI');
-                return result;
-
-            } catch (error1) {
-                console.warn("Priority 1 failed:", error1.message);
-
-                try {
-                    // Priority 2 - Powerful but slow
-                    console.log('Attempting Priority 2: gemini-3-pro-preview');
-                    const model2 = this.genAI.getGenerativeModel({
-                        model: "gemini-3-pro-preview",
-                        generationConfig: { temperature: 0.1, candidateCount: 1 }
-                    });
-                    const result = await this._generateWithTimeout(model2, payload, onStreamUpdate, 60000); // 60s timeout
-                    console.timeEnd('TranslationAPI');
-                    return result;
-
-                } catch (error2) {
-                    console.warn("Priority 2 failed:", error2.message);
-
-                    // Priority 3 (Guaranteed Fallback)
-                    console.log('Attempting Priority 3: gemini-1.5-flash (Reliable)');
-                    const model3 = this.genAI.getGenerativeModel({
-                        model: "gemini-1.5-flash",
-                        generationConfig: { temperature: 0.1, candidateCount: 1 }
-                    });
-
-                    // No timeout for the safe model
-                    const result = await this._generateWithRetry(model3, payload, onStreamUpdate);
-                    console.timeEnd('TranslationAPI');
-                    return result;
-                }
-            }
-
-        } catch (error) {
-            console.error('All translation attempts failed:', error);
-            throw new Error(`System Failure: ${error.message}`);
-        }
+        return this.provider.translate(input, targetLanguage, onStreamUpdate);
     }
 
     /**
      * Translates image with word-by-word mapping for highlighting feature
-     * @param {object} imageData - Image Data object { mimeType, data }
+     * @param {object} imageData - Image Data { mimeType, data }
      * @param {string} targetLanguage - Target language
-     * @returns {Promise<object>} - { fullTranslation, wordPairs: [{chinese, pinyin, english}] }
+     * @returns {Promise<object>} - { fullTranslation, wordPairs }
      */
     async translateWithWordPairs(imageData, targetLanguage = 'english') {
-        if (!this.apiKey || !this.genAI) {
-            throw new Error('API key not configured. Please check your settings.');
+        if (!this.provider) {
+            throw new Error('Translation provider not configured.');
         }
-
-        const languageName = targetLanguage === 'thai' ? 'Thai' : 'English';
-
-        const imagePart = {
-            inlineData: {
-                mimeType: imageData.mimeType || "image/jpeg",
-                data: imageData.data
-            }
-        };
-
-        const textPart = {
-            text: `Analyze the Chinese text in this image and provide a translation with word-by-word mapping.
-
-Return a JSON object in this EXACT format (no markdown, just raw JSON):
-{
-  "originalText": "The original Chinese text as seen in the image",
-  "fullTranslation": "The complete ${languageName} translation",
-  "wordPairs": [
-    {"chinese": "你好", "pinyin": "nǐ hǎo", "translation": "hello"},
-    {"chinese": "今天", "pinyin": "jīn tiān", "translation": "today"}
-  ]
-}
-
-Important rules:
-1. Include ALL significant words/phrases from the Chinese text
-2. Group multi-character words appropriately (don't split 今天 into 今 and 天)
-3. Provide accurate pinyin with tone marks
-4. The translation should be in ${languageName}
-5. Return ONLY the JSON object, no explanations or markdown`
-        };
-
-        const payload = [imagePart, textPart];
-
-        console.log('Requesting word-pair translation...');
-
-        try {
-            const model = this.genAI.getGenerativeModel({
-                model: "gemini-2.5-flash",
-                generationConfig: {
-                    temperature: 0.1,
-                    candidateCount: 1,
-                    responseMimeType: "application/json"
-                }
-            });
-
-            const result = await model.generateContent(payload);
-            const response = await result.response;
-            const text = response.text();
-
-            // Parse JSON response
-            try {
-                const parsed = JSON.parse(text);
-                return {
-                    originalText: parsed.originalText || '',
-                    fullTranslation: parsed.fullTranslation || '',
-                    wordPairs: parsed.wordPairs || []
-                };
-            } catch (parseError) {
-                console.error('Failed to parse word pairs JSON:', parseError);
-                // Fallback: return just the text as full translation
-                return {
-                    originalText: '',
-                    fullTranslation: text,
-                    wordPairs: []
-                };
-            }
-
-        } catch (error) {
-            console.error('Word pair translation failed:', error);
-            throw error;
-        }
-    }
-
-    // New helper: Race request against timeout
-    async _generateWithTimeout(model, prompt, onStreamUpdate, timeoutMs = 10000) {
-        // Create a promise that rejects after timeout
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs);
-        });
-
-        // Race the actual request against timeout
-        const result = await Promise.race([
-            this._generateWithRetry(model, prompt, onStreamUpdate),
-            timeoutPromise
-        ]);
-        return result;
-    }
-
-    // Helper method to handle retries and streaming
-    async _generateWithRetry(model, prompt, onStreamUpdate) {
-        let lastError;
-        const isVision = Array.isArray(prompt); // Detect Vision payload
-
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                if (isVision) {
-                    // Vision: Non-streaming for stability (Gemini 3/2.5)
-                    const result = await model.generateContent(prompt);
-                    const response = await result.response;
-                    const text = response.text();
-                    return text;
-                } else if (onStreamUpdate && typeof onStreamUpdate === 'function') {
-                    // Text: Streaming
-                    const result = await model.generateContentStream(prompt);
-                    let fullText = '';
-                    for await (const chunk of result.stream) {
-                        const chunkText = chunk.text();
-                        fullText += chunkText;
-                        onStreamUpdate(fullText);
-                    }
-                    return fullText.trim();
-                } else {
-                    // Text: Non-streaming
-                    const result = await model.generateContent(prompt);
-                    return result.response.text().trim();
-                }
-
-            } catch (error) {
-                lastError = error;
-                // Retry on 503 (Overloaded) or 429
-                if (error.message.includes('503') || error.message.includes('overloaded') || error.message.includes('429')) {
-                    console.warn(`Attempt ${attempt} failed (Server Overloaded). Retrying...`);
-                    await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-                    continue;
-                }
-                throw error;
-            }
-        }
-        throw lastError;
+        return this.provider.translateWithWordPairs(imageData, targetLanguage);
     }
 
     /**
      * Generate example sentences using a Chinese word
      * @param {string} chineseWord - Chinese word/phrase
      * @param {string} pinyin - Pinyin pronunciation
-     * @param {string} targetLanguage - Target language for translation
+     * @param {string} targetLanguage - Target language
      * @returns {Promise<Array>} - Array of example sentence objects
      */
     async generateExampleSentences(chineseWord, pinyin = '', targetLanguage = 'english') {
-        if (!this.apiKey || !this.genAI) {
-            throw new Error('API key not configured.');
+        if (!this.provider) {
+            throw new Error('Translation provider not configured.');
         }
-
-        const languageName = targetLanguage === 'thai' ? 'Thai' : 'English';
-
-        const prompt = `Generate 2 simple example sentences using the Chinese word "${chineseWord}"${pinyin ? ` (${pinyin})` : ''}.
-
-For each sentence, provide:
-1. The Chinese sentence
-2. Pinyin romanization  
-3. ${languageName} translation
-
-Keep the sentences simple and practical for a learner.
-
-Format your response as JSON array:
-[
-  {"chinese": "例句1", "pinyin": "lì jù yī", "translation": "Example sentence 1"},
-  {"chinese": "例句2", "pinyin": "lì jù èr", "translation": "Example sentence 2"}
-]
-
-ONLY output the JSON array, no other text.`;
-
-        try {
-            const model = this.genAI.getGenerativeModel({
-                model: 'gemini-2.5-flash',
-                generationConfig: { temperature: 0.7 }
-            });
-
-            const result = await model.generateContent(prompt);
-            const text = result.response.text().trim();
-
-            // Extract JSON from response
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
-
-            console.warn('Could not parse example sentences response');
-            return [];
-        } catch (error) {
-            console.error('Error generating example sentences:', error);
-            throw error;
-        }
+        return this.provider.generateExampleSentences(chineseWord, pinyin, targetLanguage);
     }
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * QUICK REFERENCE: How to Switch to Your Custom Model
+ * ═══════════════════════════════════════════════════════════════
+ * 
+ * STEP 1: Train your model (using PyTorch, Hugging Face, etc.)
+ * 
+ * STEP 2: Host it as an API (FastAPI example):
+ *   
+ *   from fastapi import FastAPI
+ *   app = FastAPI()
+ *   
+ *   @app.post("/translate")
+ *   def translate(data: dict):
+ *       result = your_model.translate(data["input"], data["targetLanguage"])
+ *       return {"translation": result}
+ * 
+ * STEP 3: Update your .env file:
+ *   
+ *   VITE_TRANSLATION_PROVIDER=custom
+ *   VITE_CUSTOM_MODEL_URL=http://localhost:8000
+ * 
+ * STEP 4: Restart your app - it now uses YOUR model!
+ * 
+ * OPTIONAL: Use hybrid mode for testing:
+ *   VITE_TRANSLATION_PROVIDER=hybrid
+ *   (Uses your model first, falls back to Gemini if it fails)
+ */
