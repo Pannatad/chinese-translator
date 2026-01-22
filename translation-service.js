@@ -152,6 +152,21 @@ export class TranslationService {
         }
         return this.provider.generateExampleSentences(chineseWord, pinyin, targetLanguage);
     }
+
+    /**
+     * Translates text directly (for the translation bot)
+     * @param {string} text - Text to translate
+     * @param {string} sourceLanguage - Source language code (or 'auto')
+     * @param {string} targetLanguage - Target language code
+     * @param {function} onStreamUpdate - Optional streaming callback
+     * @returns {Promise<string>} - Translated text
+     */
+    async translateText(text, sourceLanguage = 'auto', targetLanguage = 'english', onStreamUpdate = null) {
+        if (!this.provider) {
+            throw new Error('Translation provider not configured. Please check your settings.');
+        }
+        return this.provider.translateText(text, sourceLanguage, targetLanguage, onStreamUpdate);
+    }
 }
 
 /**

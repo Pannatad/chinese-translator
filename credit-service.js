@@ -17,7 +17,8 @@ const UNLOCK_KEYS = {
 // Store actual keys for simple validation (in production, use server-side validation)
 const VALID_KEYS = {
     'chingchong-2025': 50,
-    'chingchong-premium-2025': 100
+    'chingchong-premium-2025': 100,
+    'secret-67': 500
 };
 
 export class CreditService {

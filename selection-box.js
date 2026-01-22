@@ -270,6 +270,93 @@ export class SelectionBox {
         };
     }
 
+    /**
+     * Capture the current selection area and return as base64 data URL
+     * Works with either a canvas element (for PDF) or an image element
+     * @returns {string|null} Base64 data URL of the captured selection, or null if capture failed
+     */
+    captureSelection() {
+        // Find the source element (canvas for PDF, image for uploaded images)
+        const canvas = this.container.querySelector('canvas');
+        const image = this.container.querySelector('img');
+
+        let sourceElement = canvas || image;
+        if (!sourceElement) {
+            console.warn('No canvas or image found in container');
+            return null;
+        }
+
+        const boxRect = this.box.getBoundingClientRect();
+        const sourceRect = sourceElement.getBoundingClientRect();
+
+        // Calculate the overlap between selection box and source
+        const overlapLeft = Math.max(boxRect.left, sourceRect.left);
+        const overlapTop = Math.max(boxRect.top, sourceRect.top);
+        const overlapRight = Math.min(boxRect.right, sourceRect.right);
+        const overlapBottom = Math.min(boxRect.bottom, sourceRect.bottom);
+
+        if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) {
+            console.warn('No overlap between selection box and source');
+            return null;
+        }
+
+        // Calculate crop coordinates relative to the source element
+        const cropX = overlapLeft - sourceRect.left;
+        const cropY = overlapTop - sourceRect.top;
+        const cropWidth = overlapRight - overlapLeft;
+        const cropHeight = overlapBottom - overlapTop;
+
+        // Create a temporary canvas to capture the selection
+        const tempCanvas = document.createElement('canvas');
+        const ctx = tempCanvas.getContext('2d');
+
+        if (canvas) {
+            // For PDF canvas - scale based on displayed size vs actual canvas size
+            const scaleX = canvas.width / sourceRect.width;
+            const scaleY = canvas.height / sourceRect.height;
+
+            tempCanvas.width = cropWidth * scaleX;
+            tempCanvas.height = cropHeight * scaleY;
+
+            ctx.drawImage(
+                canvas,
+                cropX * scaleX,
+                cropY * scaleY,
+                cropWidth * scaleX,
+                cropHeight * scaleY,
+                0, 0,
+                tempCanvas.width,
+                tempCanvas.height
+            );
+        } else if (image) {
+            // For uploaded images - scale based on natural size vs displayed size
+            const scaleX = image.naturalWidth / sourceRect.width;
+            const scaleY = image.naturalHeight / sourceRect.height;
+
+            tempCanvas.width = cropWidth * scaleX;
+            tempCanvas.height = cropHeight * scaleY;
+
+            ctx.drawImage(
+                image,
+                cropX * scaleX,
+                cropY * scaleY,
+                cropWidth * scaleX,
+                cropHeight * scaleY,
+                0, 0,
+                tempCanvas.width,
+                tempCanvas.height
+            );
+        }
+
+        // Return as base64 data URL
+        try {
+            return tempCanvas.toDataURL('image/png');
+        } catch (error) {
+            console.error('Failed to capture selection:', error);
+            return null;
+        }
+    }
+
     reset() {
         this.box.style.width = '300px';
         this.box.style.height = '200px';

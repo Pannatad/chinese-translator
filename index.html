@@ -35,7 +35,7 @@
         <!-- Header -->
         <header class="app-header">
             <div class="header-content">
-                <h1 class="app-title">📚 Chinese Translator</h1>
+                <h1 class="app-title">📚 Chinese Language Assistant</h1>
                 <div class="header-actions">
                     <!-- Credit Display (shown when logged in) -->
                     <div id="creditDisplay" class="credit-display" style="display: none;">
@@ -69,12 +69,48 @@
             </div>
         </header>
 
-        <!-- Upload Area (shown when no PDF/image loaded) -->
-        <div id="uploadArea" class="upload-area">
+        <!-- Document Tabs Bar -->
+        <div id="documentTabs" class="document-tabs" style="display: none;">
+            <div class="tabs-wrapper">
+                <!-- Tabs will be rendered dynamically -->
+                <button id="newTabBtn" class="new-tab-btn" title="Open new document">+</button>
+            </div>
+        </div>
+
+        <!-- Start Page (shown first) -->
+        <div id="startArea" class="start-area">
+            <div class="start-content">
+                <div class="start-logo">📚</div>
+                <h1 class="start-title">Chinese Language Assistant</h1>
+                <p class="start-subtitle">Translate, explain, and learn with AI</p>
+
+                <!-- Language Selector -->
+                <div class="start-settings">
+                    <div class="setting-row">
+                        <label for="startLanguage">🌐 Response Language</label>
+                        <select id="startLanguage" class="glass-select">
+                            <option value="english">🇺🇸 English</option>
+                            <option value="thai">🇹🇭 ภาษาไทย</option>
+                            <option value="japanese">🇯🇵 日本語</option>
+                            <option value="korean">🇰🇷 한국어</option>
+                            <option value="vietnamese">🇻🇳 Tiếng Việt</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Start Button -->
+                <button id="startBtn" class="start-btn">
+                    <span>▶</span> Start
+                </button>
+            </div>
+        </div>
+
+        <!-- Upload Area (hidden initially, shown after Start) -->
+        <div id="uploadArea" class="upload-area" style="display: none;">
             <div class="upload-content">
                 <div class="upload-icon">📄</div>
-                <h2>Translate Chinese Text</h2>
-                <p>Choose a PDF, take a photo, or upload an image</p>
+                <h2>Select Input Method</h2>
+                <p>Choose how you want to translate</p>
 
                 <div class="upload-buttons">
                     <input type="file" id="pdfInput" accept=".pdf" hidden>
@@ -85,9 +121,15 @@
                     <button id="uploadImageBtn" class="primary-btn image-btn">🖼️ Upload Image</button>
                     <button id="cameraBtn" class="primary-btn camera-btn">📷 Take Photo</button>
                     <button id="liveCameraBtn" class="primary-btn live-btn">🔴 Live Translate</button>
+                    <button id="textTranslatorBtn" class="primary-btn text-translator-btn">💬 Text Input</button>
+                    <button id="aiAssistantBtn" class="primary-btn ai-assistant-btn">🤖 AI Chat</button>
                 </div>
+
+                <!-- Back Button -->
+                <button id="backToStartBtn" class="back-btn">← Back</button>
             </div>
         </div>
+
 
         <!-- Live Camera Viewer (Real-time translation) -->
         <div id="liveCameraArea" class="live-camera-area" style="display: none;">
@@ -189,15 +231,15 @@
                     <div class="resize-handle top-right"></div>
                     <div class="resize-handle bottom-left"></div>
                     <div class="resize-handle bottom-right"></div>
-                    <button id="captureBtn" class="capture-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        Translate
-                    </button>
+                    <!-- Dual Action Buttons -->
+                    <div class="selection-actions">
+                        <button id="captureBtn" class="action-btn translate-action">
+                            🔤 Translate
+                        </button>
+                        <button id="askBtn" class="action-btn ask-action">
+                            ❓ Ask
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -232,15 +274,15 @@
                     <div class="resize-handle top-right"></div>
                     <div class="resize-handle bottom-left"></div>
                     <div class="resize-handle bottom-right"></div>
-                    <button id="imageCaptureBtn" class="capture-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        Translate
-                    </button>
+                    <!-- Dual Action Buttons -->
+                    <div class="selection-actions">
+                        <button id="imageCaptureBtn" class="action-btn translate-action">
+                            🔤 Translate
+                        </button>
+                        <button id="imageAskBtn" class="action-btn ask-action">
+                            ❓ Ask
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -292,6 +334,13 @@
                     </button>
                 </div>
                 <div class="modal-body">
+                    <!-- Original Text Section -->
+                    <div class="translation-section">
+                        <h3>Original Chinese</h3>
+                        <div id="originalText" class="text-box original-result"></div>
+                        <div id="pinyinText" class="pinyin-text"></div>
+                    </div>
+
                     <!-- Full Translation Section -->
                     <div class="translation-section">
                         <h3 id="translationLabel">Translation</h3>
@@ -450,6 +499,140 @@
                     <div id="historyEmpty" class="history-empty" style="display: none;">
                         <p>📝 No translations yet</p>
                         <p class="text-secondary">Your translation history will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Translation Bot Modal -->
+        <div id="translatorBotModal" class="modal" style="display: none;">
+            <div class="modal-content translator-bot-modal-content">
+                <div class="modal-header">
+                    <h2>💬 Text Translator</h2>
+                    <button id="closeTranslatorBotBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body translator-bot-body">
+                    <!-- Language Selection -->
+                    <div class="translator-language-row">
+                        <div class="language-select-group">
+                            <label for="botSourceLang">From</label>
+                            <select id="botSourceLang" class="select-field">
+                                <option value="auto">🔮 Auto-detect</option>
+                                <option value="chinese" selected>🇨🇳 Chinese</option>
+                                <option value="english">🇺🇸 English</option>
+                                <option value="thai">🇹🇭 Thai</option>
+                                <option value="japanese">🇯🇵 Japanese</option>
+                                <option value="korean">🇰🇷 Korean</option>
+                                <option value="spanish">🇪🇸 Spanish</option>
+                                <option value="french">🇫🇷 French</option>
+                                <option value="german">🇩🇪 German</option>
+                                <option value="vietnamese">🇻🇳 Vietnamese</option>
+                            </select>
+                        </div>
+                        <button id="swapLanguagesBtn" class="swap-lang-btn" title="Swap languages">⇄</button>
+                        <div class="language-select-group">
+                            <label for="botTargetLang">To</label>
+                            <select id="botTargetLang" class="select-field">
+                                <option value="english" selected>🇺🇸 English</option>
+                                <option value="thai">🇹🇭 Thai</option>
+                                <option value="chinese">🇨🇳 Chinese</option>
+                                <option value="japanese">🇯🇵 Japanese</option>
+                                <option value="korean">🇰🇷 Korean</option>
+                                <option value="spanish">🇪🇸 Spanish</option>
+                                <option value="french">🇫🇷 French</option>
+                                <option value="german">🇩🇪 German</option>
+                                <option value="vietnamese">🇻🇳 Vietnamese</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="translator-input-section">
+                        <textarea id="botInputText" class="translator-textarea" placeholder="Enter text to translate..."
+                            rows="4"></textarea>
+                        <div class="translator-input-actions">
+                            <span id="botCharCount" class="char-count">0 characters</span>
+                            <button id="clearBotInputBtn" class="icon-btn-small" title="Clear">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- Translate Button -->
+                    <button id="botTranslateBtn" class="primary-btn full-width translate-action-btn">
+                        🚀 Translate
+                    </button>
+
+                    <!-- Output Area -->
+                    <div id="botOutputSection" class="translator-output-section" style="display: none;">
+                        <div class="output-header">
+                            <h3>Translation</h3>
+                            <button id="copyTranslationBtn" class="icon-btn-small" title="Copy to clipboard">📋</button>
+                        </div>
+                        <div id="botOutputText" class="translator-output"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Assistant Modal -->
+        <div id="aiAssistantModal" class="modal" style="display: none;">
+            <div class="modal-content ai-assistant-modal-content">
+                <div class="modal-header ai-assistant-header">
+                    <h2>🤖 AI Language Assistant</h2>
+                    <button id="closeAIAssistantBtn" class="close-btn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body ai-assistant-body">
+                    <!-- Quick Actions -->
+                    <div class="ai-quick-actions">
+                        <button id="aiExplainBtn" class="ai-action-btn" data-action="explain">
+                            <span class="action-icon">📖</span>
+                            <span>Explain</span>
+                        </button>
+                        <button id="aiGrammarBtn" class="ai-action-btn" data-action="grammar">
+                            <span class="action-icon">📝</span>
+                            <span>Grammar</span>
+                        </button>
+                        <button id="aiPracticeBtn" class="ai-action-btn" data-action="practice">
+                            <span class="action-icon">🎯</span>
+                            <span>Practice</span>
+                        </button>
+                        <button id="aiClearBtn" class="ai-action-btn ai-clear-btn" data-action="clear">
+                            <span class="action-icon">🗑️</span>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+
+                    <!-- Chat Messages Area -->
+                    <div id="aiChatMessages" class="ai-chat-messages">
+                        <div class="ai-welcome-message">
+                            <p>👋 Hello! I'm your Chinese language assistant.</p>
+                            <p>Ask me anything about Chinese language, get explanations, grammar analysis, or practice
+                                exercises!</p>
+                        </div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="ai-input-area">
+                        <textarea id="aiInputText" class="ai-input" placeholder="Ask a question about Chinese..."
+                            rows="2"></textarea>
+                        <button id="aiSendBtn" class="ai-send-btn" title="Send">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </div>

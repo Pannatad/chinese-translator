@@ -12,6 +12,8 @@ import { CreditService } from './credit-service.js';
 import { WordHighlighter } from './word-highlight.js';
 import { HistoryService } from './history-service.js';
 import { CameraTranslator } from './camera-translator.js';
+import { DocumentManager } from './document-manager.js';
+import { AIAssistantService } from './ai-assistant-service.js';
 
 class ChineseTranslatorApp {
     constructor() {
@@ -23,6 +25,7 @@ class ChineseTranslatorApp {
         this.authService = null;
         this.creditService = null;
         this.wordHighlighter = null;
+        this.documentManager = null;
 
         // Auth state
         this.isLoggedIn = false;
@@ -49,8 +52,17 @@ class ChineseTranslatorApp {
         this.creditService = new CreditService();
         this.historyService = new HistoryService();
         this.wordHighlighter = new WordHighlighter('wordHighlightContent');
+        this.documentManager = new DocumentManager();
+        this.aiAssistantService = new AIAssistantService();
+
+        // Set up document manager callbacks
+        this.documentManager.onTabChange = (doc) => this.handleTabChange(doc);
+
+        // Listen for new document requests from tab bar
+        document.addEventListener('openNewDocument', () => this.showUploadArea());
 
         this.translationService.setApiKey(this.settings.apiKey);
+        this.aiAssistantService.setApiKey(this.settings.apiKey);
 
         // Initialize UI event listeners
         this.initEventListeners();
@@ -60,6 +72,9 @@ class ChineseTranslatorApp {
 
         // Initialize word highlight listeners
         this.initWordHighlightListeners();
+
+        // Initialize AI Assistant listeners
+        this.initAIAssistantListeners();
 
         // Listen for auth state changes
         this.authService.onAuthStateChange((user) => {
@@ -123,10 +138,29 @@ class ChineseTranslatorApp {
     }
 
     initEventListeners() {
+        // Start Page - Show upload area when Start is clicked
+        this.addTouchClick('startBtn', () => this.showUploadFromStart());
+        this.addTouchClick('backToStartBtn', () => this.showStartArea());
+
+        // Language selector on start page
+        const startLanguage = document.getElementById('startLanguage');
+        if (startLanguage) {
+            startLanguage.value = this.settings.targetLanguage;
+            startLanguage.addEventListener('change', (e) => {
+                this.settings.targetLanguage = e.target.value;
+                this.saveSettings();
+            });
+        }
+
+        // Ask buttons on selection boxes
+        this.addTouchClick('askBtn', () => this.captureAndAsk());
+        this.addTouchClick('imageAskBtn', () => this.captureAndAskImage());
+
         // Upload area
         const uploadBtn = document.getElementById('uploadBtn');
         const pdfInput = document.getElementById('pdfInput');
         const uploadArea = document.getElementById('uploadArea');
+
 
         if (uploadBtn && pdfInput) {
             uploadBtn.addEventListener('click', () => pdfInput.click());
@@ -219,6 +253,9 @@ class ChineseTranslatorApp {
         };
         historyModal.addEventListener('click', handleHistoryBackdrop);
         historyModal.addEventListener('touchend', handleHistoryBackdrop);
+
+        // Translation Bot modal
+        this.initTranslatorBotListeners();
     }
 
     initAuthListeners() {
@@ -660,6 +697,14 @@ class ChineseTranslatorApp {
         try {
             await this.pdfViewer.loadPDF(file);
 
+            // Add to document manager for tab support
+            const docId = this.documentManager.addDocument('pdf', file.name, { file });
+            this.documentManager.updateActiveDocument({
+                pdfDoc: this.pdfViewer.pdfDoc,
+                currentPage: this.pdfViewer.currentPage,
+                scale: this.pdfViewer.scale
+            });
+
             if (saveToStorage) {
                 // Save file to IndexedDB
                 await this.storageService.saveFile('currentPDF', file);
@@ -707,6 +752,9 @@ class ChineseTranslatorApp {
         };
         reader.readAsDataURL(file);
 
+        // Store file name for document manager
+        this._pendingImageName = file.name;
+
         // Reset input so same file can be selected again
         event.target.value = '';
     }
@@ -717,6 +765,11 @@ class ChineseTranslatorApp {
     displayImage(dataUrl) {
         this.currentImageMode = true;
         this.currentImageData = dataUrl;
+
+        // Add to document manager for tab support
+        const imageName = this._pendingImageName || 'Image';
+        this.documentManager.addDocument('image', imageName, { dataUrl });
+        this._pendingImageName = null;
 
         const uploadedImage = document.getElementById('uploadedImage');
         uploadedImage.src = dataUrl;
@@ -733,6 +786,165 @@ class ChineseTranslatorApp {
 
             this.hideLoading();
         };
+    }
+
+    /**
+     * Handle tab change in the document manager
+     */
+    async handleTabChange(doc) {
+        if (!doc) {
+            // No documents open, show upload area
+            this.showUploadArea();
+            return;
+        }
+
+        if (doc.type === 'pdf') {
+            // Restore PDF state
+            if (doc.data.file) {
+                await this.pdfViewer.loadPDF(doc.data.file);
+                if (doc.currentPage && doc.currentPage > 1) {
+                    this.pdfViewer.currentPage = doc.currentPage;
+                    await this.pdfViewer.renderPage(doc.currentPage);
+                }
+                if (doc.scale) {
+                    this.pdfViewer.scale = doc.scale;
+                }
+                this.pdfViewer.updatePageInfo();
+                this.pdfViewer.updateZoomLevel();
+            }
+
+            // Show PDF viewer
+            document.getElementById('uploadArea').style.display = 'none';
+            document.getElementById('pdfViewerArea').style.display = 'flex';
+            document.getElementById('imageViewerArea').style.display = 'none';
+
+            // Re-initialize selection box
+            const pdfContainer = document.getElementById('pdfContainer');
+            this.selectionBox = new SelectionBox(pdfContainer);
+
+        } else if (doc.type === 'image') {
+            // Restore image state
+            this.currentImageMode = true;
+            this.currentImageData = doc.data.dataUrl;
+            document.getElementById('uploadedImage').src = doc.data.dataUrl;
+
+            // Show image viewer
+            document.getElementById('uploadArea').style.display = 'none';
+            document.getElementById('pdfViewerArea').style.display = 'none';
+            document.getElementById('imageViewerArea').style.display = 'flex';
+
+            // Re-initialize selection box
+            const imageContainer = document.getElementById('imageContainer');
+            this.imageSelectionBox = new SelectionBox(imageContainer, 'imageSelectionBox');
+        }
+    }
+
+    /**
+     * Show upload area (for adding new documents from tab bar)
+     */
+    showUploadArea() {
+        document.getElementById('startArea').style.display = 'none';
+        document.getElementById('uploadArea').style.display = 'flex';
+        document.getElementById('pdfViewerArea').style.display = 'none';
+        document.getElementById('imageViewerArea').style.display = 'none';
+    }
+
+    /**
+     * Show upload area from start page
+     */
+    showUploadFromStart() {
+        document.getElementById('startArea').style.display = 'none';
+        document.getElementById('pdfViewerArea').style.display = 'none';
+        document.getElementById('imageViewerArea').style.display = 'none';
+        document.getElementById('liveCameraArea').style.display = 'none';
+        document.getElementById('documentTabs').style.display = 'none';
+        document.getElementById('uploadArea').style.display = 'flex';
+    }
+
+    /**
+     * Show start area (go back from upload)
+     */
+    showStartArea() {
+        document.getElementById('uploadArea').style.display = 'none';
+        document.getElementById('pdfViewerArea').style.display = 'none';
+        document.getElementById('imageViewerArea').style.display = 'none';
+        document.getElementById('liveCameraArea').style.display = 'none';
+        document.getElementById('documentTabs').style.display = 'none';
+        document.getElementById('startArea').style.display = 'flex';
+    }
+
+    /**
+     * Capture selection and ask a question about it
+     */
+    async captureAndAsk() {
+        try {
+            if (!this.selectionBox) {
+                this.showError('Please select an area first');
+                return;
+            }
+
+            const canvasData = this.selectionBox.captureSelection();
+            if (!canvasData) {
+                this.showError('Please make a selection first');
+                return;
+            }
+
+            // Store the captured image for the AI to analyze
+            this.capturedImageForAsk = canvasData;
+
+            // Open AI Assistant modal
+            this.openAIAssistant();
+
+            // Add a message showing the captured image
+            this.addAIChatMessage('user', '📷 Captured selection - ask your question below');
+
+            // Pre-fill with prompt
+            const inputEl = document.getElementById('aiInputText');
+            if (inputEl) {
+                inputEl.placeholder = 'Ask a question about this image...';
+                inputEl.focus();
+            }
+        } catch (error) {
+            console.error('Error in captureAndAsk:', error);
+            this.showError('Failed to capture selection');
+        }
+    }
+
+    /**
+     * Capture selection from image and ask a question
+     */
+    async captureAndAskImage() {
+        try {
+            if (!this.imageSelectionBox) {
+                this.showError('Please select an area first');
+                return;
+            }
+
+            const canvasData = this.imageSelectionBox.captureSelection();
+            if (!canvasData) {
+                this.showError('Please make a selection first');
+                return;
+            }
+
+            // Store the captured image for the AI to analyze
+            this.capturedImageForAsk = canvasData;
+
+            // Open AI Assistant modal
+            this.openAIAssistant();
+
+            // Add a message showing the captured image
+            this.addAIChatMessage('user', '📷 Captured selection - ask your question below');
+
+            // Pre-fill with prompt
+            const inputEl = document.getElementById('aiInputText');
+            if (inputEl) {
+                inputEl.placeholder = 'Ask a question about this image...';
+                inputEl.focus();
+            }
+        } catch (error) {
+            console.error('Error in captureAndAskImage:', error);
+            this.showError('Failed to capture selection');
+        }
     }
 
     /**
@@ -802,13 +1014,20 @@ class ChineseTranslatorApp {
                 this.settings.targetLanguage
             );
 
-            if (result.translation) {
-                imageSelectionBox.updateStickyNote(result.translation);
+            const finalTranslation = result.fullTranslation || result.translation;
+            if (finalTranslation) {
+                imageSelectionBox.updateStickyNote(finalTranslation);
+
+                // Update modal content for View Word-by-Word
+                document.getElementById('originalText').textContent = result.originalText || '';
+                document.getElementById('pinyinText').textContent = result.fullPinyin || '';
+                document.getElementById('translatedText').textContent = finalTranslation;
 
                 // Store for word highlight
                 if (result.wordPairs && result.wordPairs.length > 0) {
                     this.lastTranslationResult = result;
                     this.wordHighlighter.setWordPairs(result.wordPairs);
+                    this.showWordHighlight(result.wordPairs);
                 }
             } else {
                 imageSelectionBox.updateStickyNote('Could not translate. Try a different selection.');
@@ -1190,6 +1409,11 @@ class ChineseTranslatorApp {
             // STICKY NOTE MODE: Show loading overlay on selection box
             this.selectionBox.showStickyNote('Translating...', true);
 
+            // Clear previous modal content
+            document.getElementById('originalText').textContent = '';
+            document.getElementById('pinyinText').textContent = '';
+            document.getElementById('translatedText').textContent = '';
+
             const translation = await this.translationService.translate(
                 visionPayload,
                 this.settings.targetLanguage,
@@ -1225,6 +1449,14 @@ class ChineseTranslatorApp {
                 this.settings.targetLanguage
             );
 
+            // Update modal with original text and pinyin if available
+            if (result.originalText) {
+                document.getElementById('originalText').textContent = result.originalText;
+            }
+            if (result.fullPinyin) {
+                document.getElementById('pinyinText').textContent = result.fullPinyin;
+            }
+
             if (result.wordPairs && result.wordPairs.length > 0) {
                 console.log('Word pairs received:', result.wordPairs.length);
                 this.showWordHighlight(result.wordPairs);
@@ -1232,10 +1464,10 @@ class ChineseTranslatorApp {
                 // Save to history (for logged in users)
                 if (this.historyService.isAvailable()) {
                     // Extract Chinese text from word pairs
-                    const chineseText = result.wordPairs.map(p => p.chinese).join('');
+                    const chineseText = result.originalText || result.wordPairs.map(p => p.chinese).join('');
                     await this.historyService.saveTranslation({
                         chinese: chineseText.substring(0, 100), // Limit for display
-                        translation: result.translation || '',
+                        translation: result.fullTranslation || result.translation || '',
                         wordPairs: result.wordPairs,
                         language: this.settings.targetLanguage
                     });
@@ -1362,6 +1594,382 @@ class ChineseTranslatorApp {
 
     showError(message) {
         alert('⚠️ ' + message);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TRANSLATION BOT METHODS
+    // ═══════════════════════════════════════════════════════════════
+
+    initTranslatorBotListeners() {
+        // Open translation bot modal
+        this.addTouchClick('textTranslatorBtn', () => this.openTranslatorBot());
+        this.addTouchClick('closeTranslatorBotBtn', () => this.closeTranslatorBot());
+
+        // Backdrop close
+        const botModal = document.getElementById('translatorBotModal');
+        const handleBotBackdrop = (e) => {
+            if (e.target.id === 'translatorBotModal') this.closeTranslatorBot();
+        };
+        botModal.addEventListener('click', handleBotBackdrop);
+        botModal.addEventListener('touchend', handleBotBackdrop);
+
+        // Swap languages button
+        this.addTouchClick('swapLanguagesBtn', () => this.swapBotLanguages());
+
+        // Clear input button
+        this.addTouchClick('clearBotInputBtn', () => {
+            document.getElementById('botInputText').value = '';
+            document.getElementById('botCharCount').textContent = '0 characters';
+        });
+
+        // Character count update
+        const inputText = document.getElementById('botInputText');
+        inputText.addEventListener('input', () => {
+            const len = inputText.value.length;
+            document.getElementById('botCharCount').textContent = `${len} character${len !== 1 ? 's' : ''}`;
+        });
+
+        // Translate button
+        this.addTouchClick('botTranslateBtn', () => this.handleBotTranslate());
+
+        // Enter key to translate (Ctrl+Enter or Cmd+Enter)
+        inputText.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                this.handleBotTranslate();
+            }
+        });
+
+        // Copy translation button
+        this.addTouchClick('copyTranslationBtn', () => this.copyBotTranslation());
+    }
+
+    openTranslatorBot() {
+        document.getElementById('translatorBotModal').style.display = 'flex';
+        document.getElementById('botInputText').focus();
+    }
+
+    closeTranslatorBot() {
+        document.getElementById('translatorBotModal').style.display = 'none';
+    }
+
+    swapBotLanguages() {
+        const sourceSelect = document.getElementById('botSourceLang');
+        const targetSelect = document.getElementById('botTargetLang');
+
+        // Don't swap if source is auto-detect
+        if (sourceSelect.value === 'auto') return;
+
+        const temp = sourceSelect.value;
+        sourceSelect.value = targetSelect.value;
+        targetSelect.value = temp;
+    }
+
+    async handleBotTranslate() {
+        const inputText = document.getElementById('botInputText').value.trim();
+        const sourceLang = document.getElementById('botSourceLang').value;
+        const targetLang = document.getElementById('botTargetLang').value;
+        const outputSection = document.getElementById('botOutputSection');
+        const outputText = document.getElementById('botOutputText');
+        const translateBtn = document.getElementById('botTranslateBtn');
+
+        if (!inputText) {
+            this.showError('Please enter some text to translate');
+            return;
+        }
+
+        if (!this.settings.apiKey) {
+            this.showError('Please configure your Gemini API key in settings first');
+            return;
+        }
+
+        // Check credits
+        const creditResult = await this.creditService.useCredit();
+        if (!creditResult.success) {
+            if (creditResult.promptLogin) {
+                this.showGuestNoCreditsModal();
+            } else {
+                document.getElementById('noCreditsModal').style.display = 'flex';
+            }
+            return;
+        }
+        document.getElementById('creditCount').textContent = creditResult.remainingCredits;
+
+        // Show output section and prepare for streaming
+        outputSection.style.display = 'block';
+        outputText.textContent = '';
+        outputText.classList.add('streaming');
+        translateBtn.disabled = true;
+        translateBtn.textContent = '⏳ Translating...';
+
+        try {
+            // Use streaming translation
+            await this.translationService.translateText(
+                inputText,
+                sourceLang,
+                targetLang,
+                (streamedText) => {
+                    outputText.textContent = streamedText;
+                }
+            );
+
+            outputText.classList.remove('streaming');
+        } catch (error) {
+            console.error('[TranslatorBot] Translation failed:', error);
+            outputText.textContent = 'Translation failed: ' + error.message;
+            outputText.classList.remove('streaming');
+        } finally {
+            translateBtn.disabled = false;
+            translateBtn.textContent = '🚀 Translate';
+        }
+    }
+
+    async copyBotTranslation() {
+        const outputText = document.getElementById('botOutputText').textContent;
+        if (!outputText) return;
+
+        try {
+            await navigator.clipboard.writeText(outputText);
+            const copyBtn = document.getElementById('copyTranslationBtn');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '✓';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 1500);
+        } catch (error) {
+            console.error('Copy failed:', error);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AI ASSISTANT METHODS
+    // ═══════════════════════════════════════════════════════════════
+
+    initAIAssistantListeners() {
+        // Open AI Assistant modal
+        this.addTouchClick('aiAssistantBtn', () => this.openAIAssistant());
+        this.addTouchClick('closeAIAssistantBtn', () => this.closeAIAssistant());
+
+        // Handle backdrop click
+        const aiModal = document.getElementById('aiAssistantModal');
+        const handleAIBackdrop = (e) => {
+            if (e.target.id === 'aiAssistantModal') this.closeAIAssistant();
+        };
+        aiModal.addEventListener('click', handleAIBackdrop);
+        aiModal.addEventListener('touchend', handleAIBackdrop);
+
+        // Send button
+        this.addTouchClick('aiSendBtn', () => this.handleAISend());
+
+        // Enter key to send (but allow Shift+Enter for newlines)
+        document.getElementById('aiInputText').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.handleAISend();
+            }
+        });
+
+        // Quick action buttons
+        this.addTouchClick('aiExplainBtn', () => this.handleAIQuickAction('explain'));
+        this.addTouchClick('aiGrammarBtn', () => this.handleAIQuickAction('grammar'));
+        this.addTouchClick('aiPracticeBtn', () => this.handleAIQuickAction('practice'));
+        this.addTouchClick('aiClearBtn', () => this.clearAIChat());
+    }
+
+    openAIAssistant() {
+        document.getElementById('aiAssistantModal').style.display = 'flex';
+        document.getElementById('aiInputText').focus();
+    }
+
+    closeAIAssistant() {
+        document.getElementById('aiAssistantModal').style.display = 'none';
+    }
+
+    async handleAISend() {
+        const inputEl = document.getElementById('aiInputText');
+        const question = inputEl.value.trim();
+
+        if (!question) return;
+
+        // Clear input
+        inputEl.value = '';
+
+        // Check credits
+        const creditResult = await this.creditService.useCredit();
+        if (!creditResult.success) {
+            if (creditResult.promptLogin) {
+                this.showGuestNoCreditsModal();
+            } else {
+                document.getElementById('noCreditsModal').style.display = 'flex';
+            }
+            return;
+        }
+        document.getElementById('creditCount').textContent = creditResult.remainingCredits;
+
+        // Add user message
+        this.addAIChatMessage('user', question);
+
+        // Add assistant message placeholder for streaming
+        const assistantMsgEl = this.addAIChatMessage('assistant', '', true);
+
+        try {
+            let response;
+
+            // Check if we have a captured image to analyze
+            if (this.capturedImageForAsk) {
+                const imageData = this.capturedImageForAsk;
+                // Clear the captured image after use
+                this.capturedImageForAsk = null;
+
+                response = await this.aiAssistantService.askQuestionWithImage(
+                    question,
+                    imageData,
+                    this.settings.targetLanguage,
+                    (streamedText) => {
+                        assistantMsgEl.querySelector('.ai-message-content').textContent = streamedText;
+                        this.scrollAIChat();
+                    }
+                );
+            } else {
+                response = await this.aiAssistantService.askQuestion(
+                    question,
+                    this.settings.targetLanguage,
+                    (streamedText) => {
+                        assistantMsgEl.querySelector('.ai-message-content').textContent = streamedText;
+                        this.scrollAIChat();
+                    }
+                );
+            }
+
+            // Remove streaming class
+            assistantMsgEl.classList.remove('streaming');
+        } catch (error) {
+            console.error('[AI Assistant] Error:', error);
+            assistantMsgEl.querySelector('.ai-message-content').textContent = 'Sorry, an error occurred: ' + error.message;
+            assistantMsgEl.classList.remove('streaming');
+        }
+    }
+
+    async handleAIQuickAction(action) {
+        const inputEl = document.getElementById('aiInputText');
+        let inputText = inputEl.value.trim();
+
+        // If no text provided, prompt user
+        if (!inputText) {
+            if (action === 'explain') {
+                inputEl.placeholder = 'Enter Chinese text to explain...';
+            } else if (action === 'grammar') {
+                inputEl.placeholder = 'Enter Chinese text for grammar analysis...';
+            } else if (action === 'practice') {
+                inputEl.placeholder = 'Enter a topic or word to practice...';
+            }
+            inputEl.focus();
+            return;
+        }
+
+        // Check credits
+        const creditResult = await this.creditService.useCredit();
+        if (!creditResult.success) {
+            if (creditResult.promptLogin) {
+                this.showGuestNoCreditsModal();
+            } else {
+                document.getElementById('noCreditsModal').style.display = 'flex';
+            }
+            return;
+        }
+        document.getElementById('creditCount').textContent = creditResult.remainingCredits;
+
+        // Clear input
+        inputEl.value = '';
+        inputEl.placeholder = 'Ask a question about Chinese...';
+
+        // Add user message
+        const actionLabel = action === 'explain' ? '📖 Explain: ' :
+            action === 'grammar' ? '📝 Grammar: ' :
+                '🎯 Practice: ';
+        this.addAIChatMessage('user', actionLabel + inputText);
+
+        // Add assistant message placeholder for streaming
+        const assistantMsgEl = this.addAIChatMessage('assistant', '', true);
+
+        try {
+            let response;
+            if (action === 'explain') {
+                response = await this.aiAssistantService.explainText(
+                    inputText,
+                    this.settings.targetLanguage,
+                    (streamedText) => {
+                        assistantMsgEl.querySelector('.ai-message-content').textContent = streamedText;
+                        this.scrollAIChat();
+                    }
+                );
+            } else if (action === 'grammar') {
+                response = await this.aiAssistantService.analyzeGrammar(
+                    inputText,
+                    this.settings.targetLanguage,
+                    (streamedText) => {
+                        assistantMsgEl.querySelector('.ai-message-content').textContent = streamedText;
+                        this.scrollAIChat();
+                    }
+                );
+            } else if (action === 'practice') {
+                // Practice doesn't support streaming
+                response = await this.aiAssistantService.generatePractice(
+                    inputText,
+                    'beginner',
+                    this.settings.targetLanguage
+                );
+                assistantMsgEl.querySelector('.ai-message-content').textContent = response;
+                this.scrollAIChat();
+            }
+
+            // Remove streaming class
+            assistantMsgEl.classList.remove('streaming');
+        } catch (error) {
+            console.error('[AI Assistant] Quick action error:', error);
+            assistantMsgEl.querySelector('.ai-message-content').textContent = 'Sorry, an error occurred: ' + error.message;
+            assistantMsgEl.classList.remove('streaming');
+        }
+    }
+
+    addAIChatMessage(role, content, isStreaming = false) {
+        const chatContainer = document.getElementById('aiChatMessages');
+
+        // Remove welcome message if it exists
+        const welcomeMsg = chatContainer.querySelector('.ai-welcome-message');
+        if (welcomeMsg) {
+            welcomeMsg.remove();
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `ai-message ${role}${isStreaming ? ' streaming' : ''}`;
+
+        const label = role === 'user' ? 'You' : 'AI Assistant';
+        messageDiv.innerHTML = `
+            <span class="ai-message-label">${label}</span>
+            <div class="ai-message-content">${content || ''}</div>
+        `;
+
+        chatContainer.appendChild(messageDiv);
+        this.scrollAIChat();
+
+        return messageDiv;
+    }
+
+    scrollAIChat() {
+        const chatContainer = document.getElementById('aiChatMessages');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    clearAIChat() {
+        const chatContainer = document.getElementById('aiChatMessages');
+        chatContainer.innerHTML = `
+            <div class="ai-welcome-message">
+                <p>👋 Hello! I'm your Chinese language assistant.</p>
+                <p>Ask me anything about Chinese language, get explanations, grammar analysis, or practice exercises!</p>
+            </div>
+        `;
+        this.aiAssistantService.clearHistory();
     }
 }
 
